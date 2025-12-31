@@ -1,0 +1,128 @@
+/* =================================
+   Import Customers Component
+   ================================= */
+.upload-area {
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.upload-area:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.upload-area svg {
+  color: var(--color-text-light);
+  margin-bottom: var(--spacing-md);
+}
+
+.upload-area h3 {
+  margin-bottom: var(--spacing-xs);
+}
+
+.upload-area p {
+  color: var(--color-text-light);
+  font-size: 0.875rem;
+}
+
+.upload-help {
+  margin-top: var(--spacing-lg);
+  padding: var(--spacing-md);
+  background: var(--color-border-light);
+  border-radius: var(--radius-md);
+}
+
+.upload-help h4 {
+  margin-bottom: var(--spacing-sm);
+  font-size: 0.875rem;
+}
+
+.upload-help p {
+  font-size: 0.875rem;
+  color: var(--color-text-light);
+  margin-bottom: var(--spacing-sm);
+}
+
+.upload-help code {
+  display: block;
+  background: var(--color-bg-sidebar);
+  color: var(--color-text-sidebar);
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: var(--color-border-light);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.file-info span {
+  flex: 1;
+  font-weight: 500;
+}
+
+.mapping-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-lg);
+}
+
+.mapping-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: var(--spacing-md);
+  align-items: center;
+}
+
+.header-name {
+  font-weight: 500;
+  text-align: right;
+}
+
+.preview-table-wrapper {
+  max-height: 200px;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.preview-table th,
+.preview-table td {
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.preview-table th {
+  background: var(--color-border-light);
+  position: sticky;
+  top: 0;
+}
+
+.preview-table th.mapped {
+  background: var(--color-primary-light);
+}
+
+.preview-table th small {
+  display: block;
+  color: var(--color-primary);
+  font-weight: normal;
+}

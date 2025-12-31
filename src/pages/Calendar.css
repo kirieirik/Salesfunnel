@@ -1,0 +1,272 @@
+/* =================================
+   Calendar Page
+   ================================= */
+.calendar-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.calendar-layout {
+  display: grid;
+  grid-template-columns: 1fr 350px;
+  gap: var(--spacing-lg);
+}
+
+/* Calendar Card */
+.calendar-card .card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.calendar-card .card-header h3 {
+  margin: 0;
+}
+
+.calendar-nav-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+}
+
+.calendar-nav-btn:hover {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+/* Calendar Grid */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.calendar-day-name {
+  padding: var(--spacing-sm);
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-light);
+  text-transform: uppercase;
+}
+
+.calendar-day {
+  min-height: 80px;
+  padding: var(--spacing-xs);
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.calendar-day:hover {
+  background: var(--color-primary-light);
+}
+
+.calendar-day.other-month {
+  opacity: 0.4;
+}
+
+.calendar-day.today {
+  background: var(--color-primary-light);
+}
+
+.calendar-day.today .day-number {
+  background: var(--color-primary);
+  color: white;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.day-number {
+  font-size: 0.875rem;
+  font-weight: 500;
+  display: block;
+  margin-bottom: var(--spacing-xs);
+}
+
+/* Day Activities */
+.day-activities {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.day-activity {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  font-size: 0.625rem;
+  border-radius: 2px;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.day-activity.type-call {
+  background: rgba(34, 197, 94, 0.1);
+  color: var(--color-success);
+}
+
+.day-activity.type-meeting {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.day-activity.type-email {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--color-warning);
+}
+
+.more-activities {
+  font-size: 0.625rem;
+  color: var(--color-text-light);
+}
+
+/* Upcoming Card */
+.upcoming-card {
+  height: fit-content;
+}
+
+.upcoming-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.upcoming-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+  padding-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.upcoming-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.upcoming-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.upcoming-icon.type-call {
+  background: rgba(34, 197, 94, 0.1);
+  color: var(--color-success);
+}
+
+.upcoming-icon.type-meeting {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.upcoming-icon.type-email {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--color-warning);
+}
+
+.upcoming-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.upcoming-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+}
+
+.upcoming-type {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--color-text-light);
+}
+
+.upcoming-datetime {
+  font-size: 0.75rem;
+  color: var(--color-text-light);
+}
+
+.upcoming-description {
+  margin: 0 0 var(--spacing-xs);
+  font-weight: 500;
+}
+
+.upcoming-customer {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 0.75rem;
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.upcoming-customer:hover {
+  text-decoration: underline;
+}
+
+.upcoming-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+/* Booking Form */
+.booking-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .calendar-layout {
+    grid-template-columns: 1fr;
+  }
+  
+  .calendar-day {
+    min-height: 60px;
+  }
+}
+
+@media (max-width: 768px) {
+  .calendar-day {
+    min-height: 40px;
+    padding: 2px;
+  }
+  
+  .day-number {
+    font-size: 0.75rem;
+  }
+  
+  .day-activities {
+    display: none;
+  }
+  
+  .calendar-day.today .day-number {
+    width: 20px;
+    height: 20px;
+    font-size: 0.625rem;
+  }
+}
