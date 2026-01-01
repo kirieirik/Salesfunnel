@@ -5,7 +5,8 @@ import {
   Building2, 
   BarChart3, 
   Settings,
-  CalendarDays
+  CalendarDays,
+  FileUp
 } from 'lucide-react'
 import { useTenant } from '../../contexts/TenantContext'
 
@@ -17,6 +18,7 @@ export default function Sidebar() {
     { to: '/calendar', icon: CalendarDays, label: 'Kalender' },
     { to: '/customers', icon: Users, label: 'Kunder' },
     { to: '/statistics', icon: BarChart3, label: 'Statistikk' },
+    { to: '/import', icon: FileUp, label: 'Importer' },
     { to: '/settings', icon: Settings, label: 'Innstillinger' },
   ]
 

@@ -111,18 +111,24 @@ export default function Dashboard() {
         <Card>
           <CardHeader>
             <h3>Salg per måned</h3>
+            <span className="year-label">{new Date().getFullYear()}</span>
           </CardHeader>
           <CardContent>
             {salesByMonth.length === 0 ? (
               <p className="empty-text">Ingen salgsdata ennå</p>
             ) : (
               <ul className="sales-list">
-                {salesByMonth.slice(-6).map(({ month, total }) => (
-                  <li key={month} className="sales-item">
-                    <span>{month}</span>
-                    <span className="sales-amount">{formatCurrency(total)}</span>
-                  </li>
-                ))}
+                {salesByMonth.slice(-6).reverse().map(({ month, total }) => {
+                  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Des']
+                  const monthIndex = parseInt(month.split('-')[1]) - 1
+                  const monthName = monthNames[monthIndex]
+                  return (
+                    <li key={month} className="sales-item">
+                      <span>{monthName}</span>
+                      <span className="sales-amount">{formatCurrency(total)}</span>
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </CardContent>

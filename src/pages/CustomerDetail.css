@@ -48,6 +48,49 @@
   grid-column: 1 / -1;
 }
 
+/* Inline Notes Editing */
+.notes-text {
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: all var(--transition);
+  cursor: pointer;
+  white-space: pre-wrap;
+}
+
+.notes-text:hover {
+  background: var(--color-bg-light);
+  border-color: var(--color-border-light);
+}
+
+.notes-text.empty {
+  color: var(--color-text-light);
+  font-style: italic;
+}
+
+.inline-edit-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+.inline-edit-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.inline-edit-actions small {
+  color: var(--color-text-light);
+  font-size: 0.75rem;
+}
+
+.inline-edit-actions .btn-group {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
 /* Collapsible Customer Info (Mobile) */
 @media (max-width: 768px) {
   .customer-info-card .collapsible-header {

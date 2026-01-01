@@ -3,6 +3,9 @@
 export const demoUser = {
   id: 'demo-user-1',
   email: 'demo@salesfunnel.no',
+  first_name: 'Demo',
+  last_name: 'Bruker',
+  phone: '+47 900 00 000',
 }
 
 // Tenant = brukerens egen bedrift (ikke å forveksle med kunde-orgnr)
@@ -26,6 +29,9 @@ export const demoCustomers = [
     industry: 'Programmeringstjenester',
     employee_count: '25',
     website: 'https://nordisktech.no',
+    contact_person: 'Erik Nordmann',
+    contact_phone: '+47 900 11 222',
+    contact_email: 'erik@nordisktech.no',
     notes: 'Stor interesse for enterprise-løsninger',
     total_sales: 1250000,
     total_profit: 375000,
@@ -307,6 +313,29 @@ export const demoSales = [
     sale_date: '2024-09-01',
     notes: '',
     customer: { id: 'cust-4', name: 'Stavanger Consulting' },
+  },
+  // Nye salg for desember 2025 (for å vise i statistikk)
+  {
+    id: 'sale-7',
+    tenant_id: 'demo-tenant-1',
+    customer_id: 'cust-1',
+    user_id: 'demo-user-1',
+    description: 'Konsulentbistand des',
+    amount: 45000,
+    sale_date: '2025-12-15',
+    notes: '',
+    customer: { id: 'cust-1', name: 'Nordisk Tech AS' },
+  },
+  {
+    id: 'sale-8',
+    tenant_id: 'demo-tenant-1',
+    customer_id: 'cust-3',
+    user_id: 'demo-user-1',
+    description: 'Serviceavtale',
+    amount: 12500,
+    sale_date: '2025-12-20',
+    notes: '',
+    customer: { id: 'cust-3', name: 'Trondheim Industri AS' },
   },
 ]
 

@@ -15,6 +15,9 @@ export default function CustomerForm({ customer, onSubmit, onCancel }) {
     industry: customer?.industry || '',
     employee_count: customer?.employee_count || '',
     website: customer?.website || '',
+    contact_person: customer?.contact_person || '',
+    contact_phone: customer?.contact_phone || '',
+    contact_email: customer?.contact_email || '',
     notes: customer?.notes || ''
   })
   const [loading, setLoading] = useState(false)
@@ -192,6 +195,34 @@ export default function CustomerForm({ customer, onSubmit, onCancel }) {
           value={formData.phone}
           onChange={handleChange}
           placeholder="+47 123 45 678"
+        />
+      </div>
+
+      <div className="form-row">
+        <Input
+          label="Kontaktperson"
+          name="contact_person"
+          value={formData.contact_person}
+          onChange={handleChange}
+          placeholder="Navn på kontaktperson"
+        />
+
+        <Input
+          label="Telefon kontaktperson"
+          type="tel"
+          name="contact_phone"
+          value={formData.contact_phone}
+          onChange={handleChange}
+          placeholder="+47 123 45 678"
+        />
+
+        <Input
+          label="E-post kontaktperson"
+          type="email"
+          name="contact_email"
+          value={formData.contact_email}
+          onChange={handleChange}
+          placeholder="navn@bedrift.no"
         />
       </div>
 

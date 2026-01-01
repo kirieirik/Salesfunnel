@@ -34,3 +34,112 @@
   color: var(--color-text-light);
   font-size: 0.875rem;
 }
+
+/* =================================
+   Onboarding Page
+   ================================= */
+.onboarding-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-md);
+  background: linear-gradient(135deg, var(--color-bg-sidebar) 0%, #334155 100%);
+}
+
+.onboarding-container {
+  background: var(--color-bg-card);
+  padding: var(--spacing-xl);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 450px;
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.onboarding-header {
+  margin-bottom: var(--spacing-lg);
+}
+
+.onboarding-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto var(--spacing-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  border-radius: 50%;
+}
+
+.onboarding-header h1 {
+  margin-bottom: var(--spacing-xs);
+  font-size: 1.5rem;
+}
+
+.onboarding-header p {
+  color: var(--color-text-light);
+  font-size: 0.95rem;
+}
+
+.onboarding-form {
+  text-align: left;
+}
+
+.onboarding-form .input-group {
+  margin-bottom: var(--spacing-md);
+}
+
+.onboarding-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+}
+
+.onboarding-btn .spinner {
+  animation: spin 1s linear infinite;
+}
+
+.onboarding-note {
+  margin-top: var(--spacing-lg);
+  font-size: 0.8rem;
+  color: var(--color-text-light);
+}
+
+.onboarding-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-xl);
+}
+
+.onboarding-steps .step {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.875rem;
+  background: var(--color-border);
+  color: var(--color-text-light);
+  transition: all 0.2s ease;
+}
+
+.onboarding-steps .step.active {
+  background: var(--color-primary);
+  color: white;
+}
+
+.onboarding-steps .step-line {
+  width: 60px;
+  height: 2px;
+  background: var(--color-border);
+}
+

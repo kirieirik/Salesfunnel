@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase, isDemoMode } from '../lib/supabase'
 import { useAuth } from './AuthContext'
-import { demoTenant, generateId } from '../lib/demoData'
+import { demoTenant, demoUser, generateId } from '../lib/demoData'
 
 const TenantContext = createContext({})
 
@@ -10,6 +10,7 @@ export const useTenant = () => useContext(TenantContext)
 export function TenantProvider({ children }) {
   const { user } = useAuth()
   const [tenant, setTenant] = useState(isDemoMode ? demoTenant : null)
+  const [profile, setProfile] = useState(isDemoMode ? demoUser : null)
   const [loading, setLoading] = useState(!isDemoMode)
   const [userRole, setUserRole] = useState(isDemoMode ? 'owner' : null)
 
@@ -30,26 +31,55 @@ export function TenantProvider({ children }) {
     
     setLoading(true)
     try {
-      // Hent brukerens tenant (én per bruker)
-      const { data: membership, error } = await supabase
-        .from('tenant_members')
+      // Hent brukerens profil med tenant (forenklet struktur)
+      const { data: profileData, error } = await supabase
+        .from('profiles')
         .select(`
+          id,
+          email,
+          first_name,
+          last_name,
+          phone,
           role,
           tenant:tenants(*)
         `)
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .single()
 
       if (error) throw error
 
-      if (membership?.tenant) {
-        setTenant(membership.tenant)
-        setUserRole(membership.role)
+      if (profileData) {
+        setProfile(profileData)
+        if (profileData.tenant) {
+          setTenant(profileData.tenant)
+          setUserRole(profileData.role)
+        }
       }
     } catch (error) {
       console.error('Error fetching tenant:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const updateProfile = async (updates) => {
+    if (isDemoMode) {
+      setProfile(prev => ({ ...prev, ...updates }))
+      return { error: null }
+    }
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update(updates)
+        .eq('id', user.id)
+
+      if (error) throw error
+      
+      setProfile(prev => ({ ...prev, ...updates }))
+      return { error: null }
+    } catch (error) {
+      return { error }
     }
   }
 
@@ -61,6 +91,7 @@ export function TenantProvider({ children }) {
     }
     
     try {
+      // Opprett ny tenant
       const { data: newTenant, error: tenantError } = await supabase
         .from('tenants')
         .insert({ name })
@@ -69,16 +100,16 @@ export function TenantProvider({ children }) {
 
       if (tenantError) throw tenantError
 
-      // Legg til bruker som owner
-      const { error: memberError } = await supabase
-        .from('tenant_members')
-        .insert({
+      // Oppdater brukerens profil med tenant og rolle
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
           tenant_id: newTenant.id,
-          user_id: user.id,
           role: 'owner'
         })
+        .eq('id', user.id)
 
-      if (memberError) throw memberError
+      if (profileError) throw profileError
 
       setTenant(newTenant)
       setUserRole('owner')
@@ -90,9 +121,11 @@ export function TenantProvider({ children }) {
 
   const value = {
     tenant,
+    profile,
     userRole,
     loading,
     createTenant,
+    updateProfile,
     refreshTenant: fetchTenant,
   }
 

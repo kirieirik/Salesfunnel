@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Building2, Users, Plus, Trash2, UserPlus } from 'lucide-react'
+import { Building2, Users, Plus, Trash2, UserPlus, User, Save, Loader2 } from 'lucide-react'
 import { supabase, isDemoMode } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useTenant } from '../contexts/TenantContext'
@@ -8,7 +8,7 @@ import { demoMembers } from '../lib/demoData'
 
 export default function Settings() {
   const { user } = useAuth()
-  const { tenant, organizations, createOrganization, userRole, refreshOrganizations } = useTenant()
+  const { tenant, profile, organizations, createOrganization, userRole, refreshOrganizations, updateProfile } = useTenant()
   
   const [showNewOrg, setShowNewOrg] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
@@ -19,6 +19,21 @@ export default function Settings() {
   const [error, setError] = useState('')
   const [members, setMembers] = useState([])
   const [loadingMembers, setLoadingMembers] = useState(false)
+
+  // Profile edit state
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileSuccess, setProfileSuccess] = useState(false)
+
+  useEffect(() => {
+    if (profile) {
+      setFirstName(profile.first_name || '')
+      setLastName(profile.last_name || '')
+      setPhone(profile.phone || '')
+    }
+  }, [profile])
 
   const fetchMembers = async () => {
     if (!tenant) return
@@ -126,6 +141,24 @@ export default function Settings() {
 
   const canManageMembers = userRole === 'owner' || userRole === 'admin'
 
+  const handleSaveProfile = async (e) => {
+    e.preventDefault()
+    setProfileSaving(true)
+    setProfileSuccess(false)
+
+    const { error } = await updateProfile({
+      first_name: firstName.trim() || null,
+      last_name: lastName.trim() || null,
+      phone: phone.trim() || null
+    })
+
+    setProfileSaving(false)
+    if (!error) {
+      setProfileSuccess(true)
+      setTimeout(() => setProfileSuccess(false), 3000)
+    }
+  }
+
   return (
     <div className="settings-page">
       <div className="page-header">
@@ -203,19 +236,64 @@ export default function Settings() {
         {/* Profile */}
         <Card>
           <CardHeader>
-            <h3>Min profil</h3>
+            <h3>
+              <User size={20} />
+              Min profil
+            </h3>
           </CardHeader>
           <CardContent>
-            <div className="profile-info">
+            <form onSubmit={handleSaveProfile} className="profile-form">
+              {profileSuccess && <div className="alert alert-success">Profil oppdatert!</div>}
+              
+              <div className="profile-form-grid">
+                <Input
+                  label="Fornavn"
+                  type="text"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="Ola"
+                />
+                <Input
+                  label="Etternavn"
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Nordmann"
+                />
+              </div>
+
+              <Input
+                label="Telefonnummer"
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+47 XXX XX XXX"
+              />
+
               <div className="info-row">
                 <label>E-post</label>
                 <span>{user?.email}</span>
               </div>
+              
               <div className="info-row">
                 <label>Rolle i {tenant?.name}</label>
                 <span className={`role role-${userRole}`}>{userRole || 'Ingen'}</span>
               </div>
-            </div>
+
+              <Button type="submit" disabled={profileSaving} className="profile-save-btn">
+                {profileSaving ? (
+                  <>
+                    <Loader2 size={16} className="spinner" />
+                    Lagrer...
+                  </>
+                ) : (
+                  <>
+                    <Save size={16} />
+                    Lagre endringer
+                  </>
+                )}
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </div>

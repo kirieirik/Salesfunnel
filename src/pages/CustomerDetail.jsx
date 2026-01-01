@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { 
-  ArrowLeft, Edit, Trash2, Phone, Mail, Building, MapPin, Globe, Briefcase, Users,
+  ArrowLeft, Edit, Trash2, Phone, Mail, Building, MapPin, Globe, Briefcase, Users, User,
   Plus, MessageSquare, Calendar, FileText, TrendingUp, Percent, ChevronDown, Clock, Check, Video
 } from 'lucide-react'
 import { supabase, isDemoMode } from '../lib/supabase'
@@ -23,6 +23,10 @@ export default function CustomerDetail() {
   const [loading, setLoading] = useState(true)
   const [showEdit, setShowEdit] = useState(false)
   const [infoExpanded, setInfoExpanded] = useState(false)
+  
+  // Inline notes state
+  const [isEditingNotes, setIsEditingNotes] = useState(false)
+  const [editedNotes, setEditedNotes] = useState('')
   
   // Inline activity form state
   const [newActivity, setNewActivity] = useState({
@@ -126,6 +130,20 @@ export default function CustomerDetail() {
       if (!error) {
         navigate('/customers')
       }
+    }
+  }
+
+  const handleSaveNotes = async () => {
+    if (editedNotes === customer.notes) {
+      setIsEditingNotes(false)
+      return
+    }
+
+    const { error } = await handleUpdate({ notes: editedNotes })
+    if (!error) {
+      setIsEditingNotes(false)
+    } else {
+      alert('Kunne ikke lagre notater: ' + error.message)
     }
   }
 
@@ -285,6 +303,33 @@ export default function CustomerDetail() {
                   </div>
                 </div>
               )}
+              {customer.contact_person && (
+                <div className="info-item">
+                  <User size={18} />
+                  <div>
+                    <label>Kontaktperson</label>
+                    <span>{customer.contact_person}</span>
+                  </div>
+                </div>
+              )}
+              {customer.contact_phone && (
+                <div className="info-item">
+                  <Phone size={18} />
+                  <div>
+                    <label>Telefon kontaktperson</label>
+                    <a href={`tel:${customer.contact_phone}`}>{customer.contact_phone}</a>
+                  </div>
+                </div>
+              )}
+              {customer.contact_email && (
+                <div className="info-item">
+                  <Mail size={18} />
+                  <div>
+                    <label>E-post kontaktperson</label>
+                    <a href={`mailto:${customer.contact_email}`}>{customer.contact_email}</a>
+                  </div>
+                </div>
+              )}
               {(customer.address || customer.postal_code || customer.city) && (
                 <div className="info-item full-width">
                   <MapPin size={18} />
@@ -297,14 +342,44 @@ export default function CustomerDetail() {
                   </div>
                 </div>
               )}
-              {customer.notes && (
-                <div className="info-item full-width">
-                  <div>
-                    <label>Notater</label>
-                    <p>{customer.notes}</p>
-                  </div>
+              <div className="info-item full-width">
+                <div>
+                  <label>Notater (dobbeltklikk for å redigere)</label>
+                  {isEditingNotes ? (
+                    <div className="inline-edit-notes">
+                      <textarea
+                        className="input"
+                        value={editedNotes}
+                        onChange={(e) => setEditedNotes(e.target.value)}
+                        autoFocus
+                        rows={4}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && e.ctrlKey) handleSaveNotes()
+                          if (e.key === 'Escape') setIsEditingNotes(false)
+                        }}
+                      />
+                      <div className="inline-edit-actions">
+                        <small>Ctrl+Enter for å lagre • Esc for å avbryte</small>
+                        <div className="btn-group">
+                          <Button variant="secondary" size="sm" onClick={() => setIsEditingNotes(false)}>Avbryt</Button>
+                          <Button size="sm" onClick={handleSaveNotes}>Lagre</Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p 
+                      className={`notes-text ${!customer.notes ? 'empty' : ''}`}
+                      onDoubleClick={() => {
+                        setEditedNotes(customer.notes || '')
+                        setIsEditingNotes(true)
+                      }}
+                      title="Dobbeltklikk for å redigere"
+                    >
+                      {customer.notes || 'Ingen notater. Dobbeltklikk for å legge til...'}
+                    </p>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           </CardContent>
         </Card>

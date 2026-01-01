@@ -172,6 +172,9 @@ export function toCustomerData(enhet) {
     // Disse feltene finnes ikke i Brønnøysund, men vi beholder de tomme
     email: '',
     phone: '',
+    contact_person: '',
+    contact_phone: '',
+    contact_email: '',
     notes: '',
     // Metadata for synkronisering
     brreg_updated_at: new Date().toISOString()

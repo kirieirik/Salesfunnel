@@ -1,18 +1,19 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { 
   ChevronLeft, ChevronRight, Plus, Clock, User, Phone, Mail, 
-  Calendar as CalendarIcon, Video, X, Check
+  Calendar as CalendarIcon, Video, X, Check, Search, Building2, Loader2
 } from 'lucide-react'
 import { useTenant } from '../contexts/TenantContext'
 import { useActivities } from '../hooks/useActivities'
 import { useCustomers } from '../hooks/useCustomers'
 import { Button, Card, CardHeader, CardContent, Modal } from '../components/common'
+import { search, toCustomerData } from '../lib/brreg'
 
 export default function Calendar() {
   const { tenant } = useTenant()
   const { activities, createActivity, updateActivity, deleteActivity } = useActivities()
-  const { customers } = useCustomers()
+  const { customers, createCustomer } = useCustomers()
   
   const [currentDate, setCurrentDate] = useState(new Date())
   const [showBookingModal, setShowBookingModal] = useState(false)
@@ -27,6 +28,61 @@ export default function Calendar() {
     is_scheduled: true
   })
   const [bookingLoading, setBookingLoading] = useState(false)
+
+  // Søk-state
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('')
+  const [brregResults, setBrregResults] = useState([])
+  const [isSearchingBrreg, setIsSearchingBrreg] = useState(false)
+  const [showSearchResults, setShowSearchResults] = useState(false)
+  const [selectedCustomer, setSelectedCustomer] = useState(null)
+  const searchRef = useRef(null)
+  const debounceRef = useRef(null)
+
+  // Filtrer eksisterende kunder
+  const filteredExistingCustomers = useMemo(() => {
+    if (!customerSearchQuery || customerSearchQuery.length < 2 || selectedCustomer) return []
+    return customers.filter(c => 
+      c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+      (c.org_nr && c.org_nr.includes(customerSearchQuery))
+    )
+  }, [customers, customerSearchQuery, selectedCustomer])
+
+  // Søk i eksisterende kunder og Brønnøysund
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+
+    if (!customerSearchQuery || customerSearchQuery.length < 2 || selectedCustomer?.name === customerSearchQuery) {
+      setBrregResults([])
+      return
+    }
+
+    debounceRef.current = setTimeout(async () => {
+      setIsSearchingBrreg(true)
+      const results = await search(customerSearchQuery)
+      // Filtrer ut de som allerede finnes i kundelisten (basert på org_nr)
+      const filteredResults = results.filter(res => 
+        !customers.some(c => c.org_nr === res.organisasjonsnummer)
+      )
+      setBrregResults(filteredResults)
+      setIsSearchingBrreg(false)
+      setShowSearchResults(true)
+    }, 500)
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [customerSearchQuery, customers, selectedCustomer])
+
+  // Lukk søkeresultater ved klikk utenfor
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (searchRef.current && !searchRef.current.contains(e.target)) {
+        setShowSearchResults(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   // Hent kun planlagte aktiviteter (fremtidige)
   const scheduledActivities = useMemo(() => {
@@ -110,34 +166,59 @@ export default function Calendar() {
   const handleDayClick = (dayInfo) => {
     const dateStr = dayInfo.date.toISOString().split('T')[0]
     setSelectedDate(dayInfo.date)
+    resetBookingForm()
     setNewBooking(prev => ({ ...prev, activity_date: dateStr }))
     setShowBookingModal(true)
   }
 
   const handleCreateBooking = async (e) => {
     e.preventDefault()
-    if (!newBooking.customer_id || !newBooking.description.trim()) return
+    if (!selectedCustomer || !newBooking.description.trim()) return
     
     setBookingLoading(true)
+    
+    let customerId = selectedCustomer.id
+
+    // Hvis kunden ikke har ID, betyr det at den er fra BRREG og må opprettes
+    if (!customerId) {
+      const customerData = toCustomerData(selectedCustomer)
+      const { data, error: customerError } = await createCustomer(customerData)
+      
+      if (customerError) {
+        alert('Kunne ikke opprette kunde: ' + customerError.message)
+        setBookingLoading(false)
+        return
+      }
+      customerId = data.id
+    }
+
     const { error } = await createActivity({
       ...newBooking,
+      customer_id: customerId,
       is_scheduled: true,
       is_completed: false
     })
     
     if (!error) {
       setShowBookingModal(false)
-      setNewBooking({
-        customer_id: '',
-        type: 'meeting',
-        description: '',
-        content: '',
-        activity_date: '',
-        activity_time: '09:00',
-        is_scheduled: true
-      })
+      resetBookingForm()
     }
     setBookingLoading(false)
+  }
+
+  const resetBookingForm = () => {
+    setNewBooking({
+      customer_id: '',
+      type: 'meeting',
+      description: '',
+      content: '',
+      activity_date: '',
+      activity_time: '09:00',
+      is_scheduled: true
+    })
+    setCustomerSearchQuery('')
+    setSelectedCustomer(null)
+    setBrregResults([])
   }
 
   const handleCompleteActivity = async (activity) => {
@@ -201,6 +282,7 @@ export default function Calendar() {
         <h1>Kalender</h1>
         <Button onClick={() => {
           setSelectedDate(new Date())
+          resetBookingForm()
           setNewBooking(prev => ({ 
             ...prev, 
             activity_date: new Date().toISOString().split('T')[0] 
@@ -324,7 +406,6 @@ export default function Calendar() {
         </Card>
       </div>
 
-      {/* Booking Modal */}
       <Modal
         isOpen={showBookingModal}
         onClose={() => setShowBookingModal(false)}
@@ -333,19 +414,102 @@ export default function Calendar() {
         <form onSubmit={handleCreateBooking} className="booking-form">
           <div className="input-group">
             <label>Kunde *</label>
-            <select
-              value={newBooking.customer_id}
-              onChange={(e) => setNewBooking(prev => ({ ...prev, customer_id: e.target.value }))}
-              className="input"
-              required
-            >
-              <option value="">Velg kunde...</option>
-              {customers.map(customer => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name}
-                </option>
-              ))}
-            </select>
+            {selectedCustomer ? (
+              <div className="selected-customer-display">
+                <div className="selected-customer-info">
+                  <Building2 size={18} />
+                  <span>{selectedCustomer.name || selectedCustomer.navn}</span>
+                </div>
+                <button 
+                  type="button" 
+                  className="remove-customer-btn"
+                  onClick={() => {
+                    setSelectedCustomer(null)
+                    setCustomerSearchQuery('')
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ) : (
+              <div className="customer-search-container" ref={searchRef}>
+                <div className="search-input-wrapper">
+                  <Search size={18} className="search-icon" />
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="Søk etter eksisterende kunde eller i Brønnøysund..."
+                    value={customerSearchQuery}
+                    onChange={(e) => {
+                      setCustomerSearchQuery(e.target.value)
+                      setShowSearchResults(true)
+                    }}
+                    onFocus={() => setShowSearchResults(true)}
+                  />
+                  {isSearchingBrreg && <Loader2 size={18} className="search-loader" />}
+                </div>
+
+                {showSearchResults && (customerSearchQuery.length >= 2) && (
+                  <div className="search-results-dropdown">
+                    {/* Eksisterende kunder */}
+                    {filteredExistingCustomers.length > 0 && (
+                      <div className="search-results-group">
+                        {filteredExistingCustomers.map(customer => (
+                          <div 
+                            key={customer.id} 
+                            className="search-result-item"
+                            onClick={() => {
+                              setSelectedCustomer(customer)
+                              setShowSearchResults(false)
+                            }}
+                          >
+                            <div className="search-result-name">
+                              <User size={14} />
+                              {customer.name}
+                              <span className="search-result-badge">Eksisterende</span>
+                            </div>
+                            <div className="search-result-info">
+                              {customer.org_nr && `Org.nr: ${customer.org_nr}`}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Brønnøysund-resultater */}
+                    {brregResults.length > 0 && (
+                      <div className="search-results-group">
+                        {brregResults.map(enhet => (
+                          <div 
+                            key={enhet.organisasjonsnummer} 
+                            className="search-result-item"
+                            onClick={() => {
+                              setSelectedCustomer(enhet)
+                              setShowSearchResults(false)
+                            }}
+                          >
+                            <div className="search-result-name">
+                              <Building2 size={14} />
+                              {enhet.navn}
+                              <span className="search-result-badge brreg">Brønnøysund</span>
+                            </div>
+                            <div className="search-result-info">
+                              Org.nr: {enhet.organisasjonsnummer} • {enhet.forretningsadresse?.poststed || 'Ukjent sted'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {filteredExistingCustomers.length === 0 && brregResults.length === 0 && !isSearchingBrreg && (
+                      <div className="search-result-item empty">
+                        Ingen treff funnet
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="input-group">
@@ -413,7 +577,7 @@ export default function Calendar() {
             <Button 
               type="submit" 
               loading={bookingLoading}
-              disabled={!newBooking.customer_id || !newBooking.description.trim()}
+              disabled={!selectedCustomer || !newBooking.description.trim()}
             >
               Opprett booking
             </Button>
