@@ -1,246 +1,346 @@
--- =====================================================
+-- =============================================
 -- SALESFUNNEL DATABASE SCHEMA
--- Supabase PostgreSQL Schema for SaaS CRM Application
--- Version: 2.0 (Desember 2025)
--- =====================================================
+-- Supabase (PostgreSQL) med Row Level Security
+-- =============================================
 
--- Enable UUID extension
+-- Aktiver UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- =====================================================
--- PROFILES (Brukerdata synkronisert med auth.users)
--- =====================================================
+-- =============================================
+-- 1. PROFILES (kobles til Supabase Auth)
+-- =============================================
 CREATE TABLE profiles (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    email VARCHAR(255) NOT NULL,
-    full_name VARCHAR(255),
-    avatar_url TEXT,
-    tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL,  -- Hvilken bedrift brukeren tilhører
-    role VARCHAR(50) DEFAULT 'member' CHECK (role IN ('owner', 'admin', 'member')),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email TEXT UNIQUE NOT NULL,
+  full_name TEXT,
+  avatar_url TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Index for e-post oppslag
-CREATE INDEX idx_profiles_email ON profiles(email);
+-- Trigger for å oppdatere updated_at
+CREATE OR REPLACE FUNCTION update_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
--- Trigger: Opprett profil automatisk når bruker registrerer seg
+CREATE TRIGGER profiles_updated_at
+  BEFORE UPDATE ON profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at();
+
+-- Auto-opprett profil når bruker registrerer seg
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO public.profiles (id, email, full_name)
-    VALUES (
-        NEW.id,
-        NEW.email,
-        COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', '')
-    );
-    RETURN NEW;
+  INSERT INTO public.profiles (id, email, full_name)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    NEW.raw_user_meta_data->>'full_name'
+  );
+  RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 CREATE TRIGGER on_auth_user_created
-    AFTER INSERT ON auth.users
-    FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION handle_new_user();
 
--- =====================================================
--- TENANTS (Bedrifter/Organisasjoner som bruker systemet)
--- =====================================================
-CREATE TABLE tenants (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(255) NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+-- =============================================
+-- 2. ORGANIZATIONS (bedrifter/tenants)
+-- =============================================
+CREATE TABLE organizations (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Index for tenant oppslag på profiles
-CREATE INDEX idx_profiles_tenant ON profiles(tenant_id);
+CREATE TRIGGER organizations_updated_at
+  BEFORE UPDATE ON organizations
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at();
 
--- =====================================================
--- CUSTOMERS (Kunder)
--- =====================================================
+-- =============================================
+-- 3. ORG_MEMBERS (kobling bruker <-> org)
+-- =============================================
+CREATE TYPE org_role AS ENUM ('owner', 'admin', 'member');
+
+CREATE TABLE org_members (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  role org_role NOT NULL DEFAULT 'member',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(org_id, user_id)
+);
+
+CREATE INDEX idx_org_members_org ON org_members(org_id);
+CREATE INDEX idx_org_members_user ON org_members(user_id);
+
+-- =============================================
+-- 4. CUSTOMERS (kunder per organisasjon)
+-- =============================================
 CREATE TABLE customers (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    
-    -- Grunnleggende info
-    name VARCHAR(255) NOT NULL,
-    org_nr VARCHAR(20),                          -- Organisasjonsnummer (kan være tom for privatkunder)
-    
-    -- Kontaktinfo bedrift
-    email VARCHAR(255),
-    phone VARCHAR(50),
-    
-    -- Kontaktperson
-    contact_person VARCHAR(255),
-    contact_phone VARCHAR(50),
-    contact_email VARCHAR(255),
-    
-    -- Adresse (splittet)
-    address VARCHAR(255),                        -- Gateadresse
-    postal_code VARCHAR(10),                     -- Postnummer
-    city VARCHAR(100),                           -- Poststed
-    
-    -- Bedriftsinfo fra Brønnøysund
-    industry VARCHAR(255),                       -- Bransje/Næringskode
-    employee_count VARCHAR(20),                  -- Antall ansatte
-    website VARCHAR(255),                        -- Hjemmeside
-    org_form VARCHAR(100),                       -- Organisasjonsform (AS, ENK, etc.)
-    
-    -- Økonomi (aggregert fra salg/import)
-    total_sales DECIMAL(15,2) DEFAULT 0,         -- Total omsetning
-    total_profit DECIMAL(15,2) DEFAULT 0,        -- Total fortjeneste
-    margin_percent DECIMAL(5,2) DEFAULT 0,       -- Dekningsgrad i prosent
-    
-    -- Metadata
-    notes TEXT,
-    brreg_updated_at TIMESTAMPTZ,                -- Sist synkronisert fra Brønnøysund
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  org_nr TEXT,  -- Organisasjonsnummer (kan dupliseres på tvers av orgs)
+  email TEXT,
+  phone TEXT,
+  address TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Indexes
-CREATE INDEX idx_customers_tenant ON customers(tenant_id);
-CREATE INDEX idx_customers_org_nr ON customers(org_nr) WHERE org_nr IS NOT NULL AND org_nr != '';
-CREATE INDEX idx_customers_name ON customers(tenant_id, name);
+CREATE TRIGGER customers_updated_at
+  BEFORE UPDATE ON customers
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at();
 
--- =====================================================
--- ACTIVITIES (Aktiviteter/Hendelser)
--- =====================================================
+CREATE INDEX idx_customers_org ON customers(org_id);
+CREATE INDEX idx_customers_org_nr ON customers(org_id, org_nr);
+
+-- =============================================
+-- 5. ACTIVITIES (kontaktlogg per kunde)
+-- =============================================
+CREATE TYPE activity_type AS ENUM ('call', 'email', 'meeting', 'note');
+
 CREATE TABLE activities (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-    
-    -- Aktivitetstype
-    type VARCHAR(50) NOT NULL CHECK (type IN ('call', 'email', 'meeting', 'note')),
-    
-    -- Innhold
-    description VARCHAR(500) NOT NULL,           -- Kort beskrivelse
-    content TEXT,                                -- Detaljert innhold/notater
-    
-    -- Dato og tid
-    activity_date DATE NOT NULL,
-    activity_time TIME,                          -- Klokkeslett (valgfritt, for bookinger)
-    
-    -- Status
-    is_scheduled BOOLEAN DEFAULT FALSE,          -- Er dette en planlagt aktivitet?
-    is_completed BOOLEAN DEFAULT FALSE,          -- Er aktiviteten fullført?
-    
-    -- Metadata
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  type activity_type NOT NULL,
+  description TEXT NOT NULL,
+  content TEXT,  -- For e-post innhold, møtenotater etc.
+  activity_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Indexes
-CREATE INDEX idx_activities_tenant ON activities(tenant_id);
+CREATE TRIGGER activities_updated_at
+  BEFORE UPDATE ON activities
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at();
+
+CREATE INDEX idx_activities_org ON activities(org_id);
 CREATE INDEX idx_activities_customer ON activities(customer_id);
-CREATE INDEX idx_activities_user ON activities(user_id);
-CREATE INDEX idx_activities_date ON activities(activity_date);
-CREATE INDEX idx_activities_scheduled ON activities(tenant_id, is_scheduled, is_completed) 
-    WHERE is_scheduled = TRUE AND is_completed = FALSE;
+CREATE INDEX idx_activities_date ON activities(activity_date DESC);
 
--- =====================================================
--- SALES (Salg - importert data)
--- =====================================================
+-- =============================================
+-- 6. SALES (salg per kunde)
+-- =============================================
 CREATE TABLE sales (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-    
-    -- Salgsinfo
-    description VARCHAR(500),                    -- Beskrivelse av salget
-    amount DECIMAL(15,2) NOT NULL,               -- Beløp eks. mva
-    sale_date DATE NOT NULL,
-    
-    -- Metadata
-    notes TEXT,
-    import_ref VARCHAR(255),                     -- Referanse fra CSV-import
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  description TEXT NOT NULL,
+  amount DECIMAL(12,2) NOT NULL,
+  sale_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Indexes
-CREATE INDEX idx_sales_tenant ON sales(tenant_id);
+CREATE TRIGGER sales_updated_at
+  BEFORE UPDATE ON sales
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at();
+
+CREATE INDEX idx_sales_org ON sales(org_id);
 CREATE INDEX idx_sales_customer ON sales(customer_id);
-CREATE INDEX idx_sales_date ON sales(sale_date);
-CREATE INDEX idx_sales_tenant_date ON sales(tenant_id, sale_date);
+CREATE INDEX idx_sales_date ON sales(sale_date DESC);
 
--- =====================================================
--- UPDATED_AT TRIGGERS
--- Automatisk oppdatering av updated_at kolonne
--- =====================================================
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+-- =============================================
+-- ROW LEVEL SECURITY (RLS) POLICIES
+-- =============================================
+
+-- Aktiver RLS på alle tabeller
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE org_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE activities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales ENABLE ROW LEVEL SECURITY;
+
+-- Hjelpefunksjon: Sjekk om bruker er medlem av org
+CREATE OR REPLACE FUNCTION is_org_member(org_id UUID)
+RETURNS BOOLEAN AS $$
 BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
+  RETURN EXISTS (
+    SELECT 1 FROM org_members
+    WHERE org_members.org_id = is_org_member.org_id
+    AND org_members.user_id = auth.uid()
+  );
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Triggers for updated_at
-CREATE TRIGGER update_tenants_updated_at
-    BEFORE UPDATE ON tenants
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Hjelpefunksjon: Sjekk brukers rolle i org
+CREATE OR REPLACE FUNCTION get_user_role(org_id UUID)
+RETURNS org_role AS $$
+DECLARE
+  user_role org_role;
+BEGIN
+  SELECT role INTO user_role FROM org_members
+  WHERE org_members.org_id = get_user_role.org_id
+  AND org_members.user_id = auth.uid();
+  RETURN user_role;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE TRIGGER update_customers_updated_at
-    BEFORE UPDATE ON customers
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- =============================================
+-- PROFILES POLICIES
+-- =============================================
+CREATE POLICY "Users can view own profile"
+  ON profiles FOR SELECT
+  USING (id = auth.uid());
 
-CREATE TRIGGER update_activities_updated_at
-    BEFORE UPDATE ON activities
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE POLICY "Users can update own profile"
+  ON profiles FOR UPDATE
+  USING (id = auth.uid());
 
-CREATE TRIGGER update_sales_updated_at
-    BEFORE UPDATE ON sales
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- For å kunne se andre brukeres email (f.eks. medlemmer i org)
+CREATE POLICY "Users can view profiles of org members"
+  ON profiles FOR SELECT
+  USING (
+    id IN (
+      SELECT om.user_id FROM org_members om
+      WHERE om.org_id IN (
+        SELECT org_id FROM org_members WHERE user_id = auth.uid()
+      )
+    )
+  );
 
-CREATE TRIGGER update_profiles_updated_at
-    BEFORE UPDATE ON profiles
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- =============================================
+-- ORGANIZATIONS POLICIES
+-- =============================================
+CREATE POLICY "Users can view organizations they are member of"
+  ON organizations FOR SELECT
+  USING (is_org_member(id));
 
--- =====================================================
--- VIEWS (Nyttige visninger)
--- =====================================================
+CREATE POLICY "Users can create organizations"
+  ON organizations FOR INSERT
+  WITH CHECK (true);
 
--- Månedlig salg per tenant
-CREATE VIEW monthly_sales_by_tenant AS
+CREATE POLICY "Owners and admins can update organization"
+  ON organizations FOR UPDATE
+  USING (get_user_role(id) IN ('owner', 'admin'));
+
+CREATE POLICY "Only owners can delete organization"
+  ON organizations FOR DELETE
+  USING (get_user_role(id) = 'owner');
+
+-- =============================================
+-- ORG_MEMBERS POLICIES
+-- =============================================
+CREATE POLICY "Users can view members of their organizations"
+  ON org_members FOR SELECT
+  USING (is_org_member(org_id));
+
+CREATE POLICY "Users can insert themselves as member"
+  ON org_members FOR INSERT
+  WITH CHECK (user_id = auth.uid() OR get_user_role(org_id) IN ('owner', 'admin'));
+
+CREATE POLICY "Owners and admins can update members"
+  ON org_members FOR UPDATE
+  USING (get_user_role(org_id) IN ('owner', 'admin'));
+
+CREATE POLICY "Owners and admins can delete members"
+  ON org_members FOR DELETE
+  USING (
+    get_user_role(org_id) IN ('owner', 'admin')
+    AND user_id != auth.uid()  -- Kan ikke slette seg selv
+  );
+
+-- =============================================
+-- CUSTOMERS POLICIES
+-- =============================================
+CREATE POLICY "Users can view customers in their organizations"
+  ON customers FOR SELECT
+  USING (is_org_member(org_id));
+
+CREATE POLICY "Users can create customers in their organizations"
+  ON customers FOR INSERT
+  WITH CHECK (is_org_member(org_id));
+
+CREATE POLICY "Users can update customers in their organizations"
+  ON customers FOR UPDATE
+  USING (is_org_member(org_id));
+
+CREATE POLICY "Owners and admins can delete customers"
+  ON customers FOR DELETE
+  USING (get_user_role(org_id) IN ('owner', 'admin', 'member'));
+
+-- =============================================
+-- ACTIVITIES POLICIES
+-- =============================================
+CREATE POLICY "Users can view activities in their organizations"
+  ON activities FOR SELECT
+  USING (is_org_member(org_id));
+
+CREATE POLICY "Users can create activities in their organizations"
+  ON activities FOR INSERT
+  WITH CHECK (is_org_member(org_id));
+
+CREATE POLICY "Users can update activities in their organizations"
+  ON activities FOR UPDATE
+  USING (is_org_member(org_id));
+
+CREATE POLICY "Users can delete activities in their organizations"
+  ON activities FOR DELETE
+  USING (is_org_member(org_id));
+
+-- =============================================
+-- SALES POLICIES
+-- =============================================
+CREATE POLICY "Users can view sales in their organizations"
+  ON sales FOR SELECT
+  USING (is_org_member(org_id));
+
+CREATE POLICY "Users can create sales in their organizations"
+  ON sales FOR INSERT
+  WITH CHECK (is_org_member(org_id));
+
+CREATE POLICY "Users can update sales in their organizations"
+  ON sales FOR UPDATE
+  USING (is_org_member(org_id));
+
+CREATE POLICY "Users can delete sales in their organizations"
+  ON sales FOR DELETE
+  USING (is_org_member(org_id));
+
+-- =============================================
+-- VIEWS FOR STATISTICS
+-- =============================================
+
+-- Månedlig salg per org
+CREATE OR REPLACE VIEW monthly_sales AS
 SELECT 
-    tenant_id,
-    DATE_TRUNC('month', sale_date) AS month,
-    SUM(amount) AS total_sales,
-    COUNT(*) AS sale_count
+  org_id,
+  DATE_TRUNC('month', sale_date) AS month,
+  SUM(amount) AS total_sales,
+  COUNT(*) AS num_sales
 FROM sales
-GROUP BY tenant_id, DATE_TRUNC('month', sale_date)
-ORDER BY tenant_id, month DESC;
+GROUP BY org_id, DATE_TRUNC('month', sale_date)
+ORDER BY month DESC;
 
--- Kunde-statistikk view
-CREATE VIEW customer_stats AS
+-- Salg per kunde per org
+CREATE OR REPLACE VIEW customer_sales AS
 SELECT 
-    c.id AS customer_id,
-    c.tenant_id,
-    c.name,
-    COALESCE(SUM(s.amount), 0) AS calculated_total_sales,
-    COUNT(s.id) AS sale_count,
-    COUNT(DISTINCT a.id) AS activity_count,
-    MAX(s.sale_date) AS last_sale_date,
-    MAX(a.activity_date) AS last_activity_date
+  c.org_id,
+  c.id AS customer_id,
+  c.name AS customer_name,
+  COALESCE(SUM(s.amount), 0) AS total_sales,
+  COUNT(s.id) AS num_sales
 FROM customers c
 LEFT JOIN sales s ON s.customer_id = c.id
-LEFT JOIN activities a ON a.customer_id = c.id
-GROUP BY c.id, c.tenant_id, c.name;
-
--- =====================================================
--- KOMMENTARER PÅ TABELLER
--- =====================================================
-COMMENT ON TABLE tenants IS 'Bedrifter/organisasjoner som bruker SaaS-løsningen';
-COMMENT ON TABLE profiles IS 'Brukerprofiler med kobling til tenant og rolle';
-COMMENT ON TABLE customers IS 'Kunder registrert av hver tenant, inkl. data fra Brønnøysund';
-COMMENT ON TABLE activities IS 'Aktiviteter (møter, samtaler, e-poster, notater) knyttet til kunder';
-COMMENT ON TABLE sales IS 'Salgsdata, primært importert fra CSV';
-
-COMMENT ON COLUMN customers.org_nr IS 'Norsk organisasjonsnummer, tom for privatkunder';
-COMMENT ON COLUMN customers.brreg_updated_at IS 'Tidspunkt for siste sync fra Brønnøysundregisteret API';
-COMMENT ON COLUMN activities.is_scheduled IS 'TRUE = fremtidig booking, FALSE = historisk aktivitet';
-COMMENT ON COLUMN sales.import_ref IS 'Unik referanse fra CSV-import for å unngå duplikater';
+GROUP BY c.org_id, c.id, c.name
+ORDER BY total_sales DESC;

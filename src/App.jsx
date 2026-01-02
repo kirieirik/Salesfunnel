@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
-import { TenantProvider, useTenant } from './contexts/TenantContext'
+import { TenantProvider } from './contexts/TenantContext'
 
 // Layout
 import Layout from './components/layout/Layout'
@@ -8,30 +8,13 @@ import Layout from './components/layout/Layout'
 // Pages
 import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
-import Onboarding from './pages/auth/Onboarding'
 import Dashboard from './pages/Dashboard'
-import Calendar from './pages/Calendar'
 import Customers from './pages/Customers'
 import CustomerDetail from './pages/CustomerDetail'
 import Statistics from './pages/Statistics'
 import Settings from './pages/Settings'
+import Calendar from './pages/Calendar'
 import Import from './pages/Import'
-
-// Wrapper som sjekker om bruker har tenant og komplett profil
-function RequireTenant({ children }) {
-  const { tenant, profile, loading } = useTenant()
-
-  if (loading) {
-    return <div className="loading-screen">Laster...</div>
-  }
-
-  // Hvis bruker ikke har komplett profil eller tenant, vis onboarding
-  if (!profile?.first_name || !profile?.last_name || !tenant) {
-    return <Onboarding />
-  }
-
-  return children
-}
 
 // Protected Route Wrapper
 function ProtectedRoute({ children }) {
@@ -45,9 +28,14 @@ function ProtectedRoute({ children }) {
     return <Navigate to="/login" replace />
   }
 
+  return children
+}
+
+// Protected Layout with TenantProvider
+function ProtectedLayout() {
   return (
     <TenantProvider>
-      <RequireTenant>{children}</RequireTenant>
+      <Layout />
     </TenantProvider>
   )
 }
@@ -87,7 +75,7 @@ function App() {
           {/* Protected routes */}
           <Route path="/" element={
             <ProtectedRoute>
-              <Layout />
+              <ProtectedLayout />
             </ProtectedRoute>
           }>
             <Route index element={<Dashboard />} />
