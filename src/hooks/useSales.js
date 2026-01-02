@@ -165,6 +165,17 @@ export function useSales(customerId = null) {
     return sales.reduce((sum, sale) => sum + parseFloat(sale.amount), 0)
   }, [sales])
 
+  const getTotalProfit = useCallback(() => {
+    return sales.reduce((sum, sale) => sum + parseFloat(sale.profit || 0), 0)
+  }, [sales])
+
+  const getMarginPercent = useCallback(() => {
+    const totalSales = getTotalSales()
+    const totalProfit = getTotalProfit()
+    if (totalSales === 0) return 0
+    return (totalProfit / totalSales) * 100
+  }, [getTotalSales, getTotalProfit])
+
   return {
     sales,
     loading,
@@ -175,5 +186,7 @@ export function useSales(customerId = null) {
     refreshSales: fetchSales,
     getSalesByMonth,
     getTotalSales,
+    getTotalProfit,
+    getMarginPercent,
   }
 }

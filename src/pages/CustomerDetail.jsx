@@ -40,7 +40,7 @@ export default function CustomerDetail() {
   const lastPickerClose = useRef(0)
 
   const { activities, createActivity, updateActivity, deleteActivity } = useActivities(id)
-  const { sales, createSale, deleteSale, getTotalSales } = useSales(id)
+  const { sales, createSale, deleteSale, getTotalSales, getTotalProfit, getMarginPercent } = useSales(id)
 
   // Filtrer aktiviteter: kommende (planlagte) vs historiske
   const scheduledActivities = useMemo(() => {
@@ -400,25 +400,25 @@ export default function CustomerDetail() {
                 <TrendingUp size={24} className="stat-icon sales" />
                 <div>
                   <span className="stat-label">Totalt salg eks. mva</span>
-                  <span className="stat-value">{formatCurrency(customer.total_sales || 0)}</span>
+                  <span className="stat-value">{formatCurrency(getTotalSales())}</span>
                 </div>
               </div>
               <div className="sales-stat">
                 <TrendingUp size={24} className="stat-icon profit" />
                 <div>
                   <span className="stat-label">Total fortjeneste eks. mva</span>
-                  <span className="stat-value">{formatCurrency(customer.total_profit || 0)}</span>
+                  <span className="stat-value">{formatCurrency(getTotalProfit())}</span>
                 </div>
               </div>
               <div className="sales-stat">
                 <Percent size={24} className="stat-icon margin" />
                 <div>
                   <span className="stat-label">Dekningsgrad</span>
-                  <span className="stat-value">{customer.margin_percent ? `${customer.margin_percent.toFixed(1)}%` : '0%'}</span>
+                  <span className="stat-value">{getMarginPercent() > 0 ? `${getMarginPercent().toFixed(1)}%` : '0%'}</span>
                 </div>
               </div>
             </div>
-            {!customer.total_sales && (
+            {sales.length === 0 && (
               <p className="empty-text">Ingen salgsdata importert ennå</p>
             )}
           </CardContent>

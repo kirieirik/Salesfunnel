@@ -1,4 +1,5 @@
-import { Users, DollarSign, Activity } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Users, DollarSign, Activity, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useCustomers } from '../hooks/useCustomers'
 import { useSales } from '../hooks/useSales'
 import { useActivities } from '../hooks/useActivities'
@@ -11,9 +12,24 @@ export default function Dashboard() {
   const { sales, getTotalSales, getSalesByMonth } = useSales()
   const { activities } = useActivities()
 
+  // År-velger state
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
+
   const totalSales = getTotalSales()
   const salesByMonth = getSalesByMonth()
   const recentActivities = activities.slice(0, 5)
+
+  // Filtrer salg for valgt år
+  const salesByMonthForYear = useMemo(() => {
+    return salesByMonth.filter(({ month }) => month.startsWith(String(selectedYear)))
+  }, [salesByMonth, selectedYear])
+
+  // Finn tilgjengelige år fra salgsdata
+  const availableYears = useMemo(() => {
+    const years = new Set(salesByMonth.map(({ month }) => parseInt(month.split('-')[0])))
+    years.add(new Date().getFullYear()) // Alltid vis inneværende år
+    return Array.from(years).sort((a, b) => b - a)
+  }, [salesByMonth])
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('nb-NO', {
@@ -111,14 +127,30 @@ export default function Dashboard() {
         <Card>
           <CardHeader>
             <h3>Salg per måned</h3>
-            <span className="year-label">{new Date().getFullYear()}</span>
+            <div className="year-selector">
+              <button 
+                className="year-nav-btn"
+                onClick={() => setSelectedYear(prev => prev - 1)}
+                disabled={!availableYears.includes(selectedYear - 1) && selectedYear <= Math.min(...availableYears)}
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <span className="year-label">{selectedYear}</span>
+              <button 
+                className="year-nav-btn"
+                onClick={() => setSelectedYear(prev => prev + 1)}
+                disabled={selectedYear >= new Date().getFullYear()}
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
           </CardHeader>
           <CardContent>
-            {salesByMonth.length === 0 ? (
-              <p className="empty-text">Ingen salgsdata ennå</p>
+            {salesByMonthForYear.length === 0 ? (
+              <p className="empty-text">Ingen salgsdata for {selectedYear}</p>
             ) : (
               <ul className="sales-list">
-                {salesByMonth.slice(-6).reverse().map(({ month, total }) => {
+                {salesByMonthForYear.slice(-6).reverse().map(({ month, total }) => {
                   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Des']
                   const monthIndex = parseInt(month.split('-')[1]) - 1
                   const monthName = monthNames[monthIndex]

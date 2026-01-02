@@ -5,14 +5,14 @@ import { useAuth } from '../contexts/AuthContext'
 import { useTenant } from '../contexts/TenantContext'
 import { Button, Input, Modal, Card, CardHeader, CardContent } from '../components/common'
 import { demoMembers } from '../lib/demoData'
+import './Settings.css'
 
 export default function Settings() {
   const { user } = useAuth()
-  const { tenant, profile, organizations, createOrganization, userRole, refreshOrganizations, updateProfile } = useTenant()
+  const { tenant, profile, userRole, updateProfile } = useTenant()
   
   const [showNewOrg, setShowNewOrg] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
-  const [newOrgName, setNewOrgName] = useState('')
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState('member')
   const [loading, setLoading] = useState(false)
@@ -63,22 +63,6 @@ export default function Settings() {
   useEffect(() => {
     fetchMembers()
   }, [tenant])
-
-  const handleCreateOrg = async (e) => {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
-
-    const { error } = await createOrganization(newOrgName)
-    
-    if (error) {
-      setError(error.message)
-    } else {
-      setNewOrgName('')
-      setShowNewOrg(false)
-    }
-    setLoading(false)
-  }
 
   const handleInvite = async (e) => {
     e.preventDefault()
@@ -166,29 +150,25 @@ export default function Settings() {
       </div>
 
       <div className="settings-grid">
-        {/* Organizations */}
-        <Card>
-          <CardHeader>
-            <h3>
-              <Building2 size={20} />
-              Organisasjoner
-            </h3>
-            <Button size="sm" onClick={() => setShowNewOrg(true)}>
-              <Plus size={16} />
-              Ny
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <ul className="org-list">
-              {organizations.map(org => (
-                <li key={org.id} className={org.id === tenant?.id ? 'active' : ''}>
-                  <span>{org.name}</span>
-                  {org.id === tenant?.id && <span className="badge">Aktiv</span>}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+        {/* Current Organization */}
+        {tenant && (
+          <Card>
+            <CardHeader>
+              <h3>
+                <Building2 size={20} />
+                Bedrift
+              </h3>
+            </CardHeader>
+            <CardContent>
+              <div className="org-info">
+                <div className="info-row">
+                  <label>Bedriftsnavn</label>
+                  <span>{tenant.name}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Members */}
         {tenant && (
@@ -297,31 +277,6 @@ export default function Settings() {
           </CardContent>
         </Card>
       </div>
-
-      {/* New Org Modal */}
-      <Modal
-        isOpen={showNewOrg}
-        onClose={() => setShowNewOrg(false)}
-        title="Ny organisasjon"
-      >
-        <form onSubmit={handleCreateOrg}>
-          {error && <div className="alert alert-error">{error}</div>}
-          <Input
-            label="Organisasjonsnavn"
-            value={newOrgName}
-            onChange={(e) => setNewOrgName(e.target.value)}
-            required
-          />
-          <div className="modal-actions">
-            <Button variant="secondary" onClick={() => setShowNewOrg(false)}>
-              Avbryt
-            </Button>
-            <Button type="submit" loading={loading}>
-              Opprett
-            </Button>
-          </div>
-        </form>
-      </Modal>
 
       {/* Invite Modal */}
       <Modal
