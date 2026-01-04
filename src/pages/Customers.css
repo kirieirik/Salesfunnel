@@ -2,6 +2,55 @@
    Customers Page
    ================================= */
 
+/* Customer Statistics Bar */
+.customer-stats-bar {
+  display: flex;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.customer-stats-bar .stat-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.customer-stats-bar .stat-item.total {
+  padding-right: var(--spacing-lg);
+  border-right: 1px solid var(--color-border);
+}
+
+.customer-stats-bar .stat-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.customer-stats-bar .stat-label {
+  font-size: 0.75rem;
+  color: var(--color-text-light);
+  margin-left: var(--spacing-xs);
+}
+
+.customer-stats-bar .stat-item.business svg {
+  color: var(--color-primary);
+}
+
+.customer-stats-bar .stat-item.private svg {
+  color: var(--color-text-light);
+}
+
+/* Search and Sort Row */
+.search-sort-row {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
 /* Search Bar */
 .search-bar {
   display: flex;
@@ -11,7 +60,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: var(--spacing-sm) var(--spacing-md);
-  margin-bottom: var(--spacing-lg);
+  flex: 1;
 }
 
 .search-bar input {
@@ -19,10 +68,37 @@
   border: none;
   outline: none;
   font-size: 0.875rem;
+  background: transparent;
 }
 
 .search-bar svg {
   color: var(--color-text-light);
+}
+
+/* Sort Dropdown */
+.sort-dropdown {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.sort-dropdown svg {
+  color: var(--color-text-light);
+  flex-shrink: 0;
+}
+
+.sort-dropdown select {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 0.875rem;
+  color: var(--color-text);
+  cursor: pointer;
+  padding-right: var(--spacing-sm);
 }
 
 /* Customers Table */
@@ -261,8 +337,93 @@
   margin-top: var(--spacing-xs);
 }
 
+/* Pagination */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.pagination-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-card);
+  color: var(--color-text);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  border-color: var(--color-primary);
+}
+
+.pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.pagination-info span:first-child {
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.pagination-count {
+  font-size: 0.75rem;
+  color: var(--color-text-light);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
+  .search-sort-row {
+    flex-direction: column;
+  }
+
+  .sort-dropdown {
+    width: 100%;
+  }
+
+  .sort-dropdown select {
+    flex: 1;
+  }
+
+  .customer-stats-bar {
+    gap: var(--spacing-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    flex-wrap: wrap;
+  }
+
+  .customer-stats-bar .stat-item.total {
+    padding-right: var(--spacing-md);
+  }
+
+  .customer-stats-bar .stat-value {
+    font-size: 1rem;
+  }
+
+  .pagination {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  .pagination-btn span {
+    display: none;
+  }
+
   .customers-table th:nth-child(2),
   .customers-table td:nth-child(2),
   .customers-table th:nth-child(3),

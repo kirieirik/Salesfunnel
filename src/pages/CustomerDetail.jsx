@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { 
   ArrowLeft, Edit, Trash2, Phone, Mail, Building, MapPin, Globe, Briefcase, Users, User,
-  Plus, MessageSquare, Calendar, FileText, TrendingUp, Percent, ChevronDown, Clock, Check, Video
+  Plus, MessageSquare, Calendar, FileText, TrendingUp, Percent, ChevronDown, Clock, Check, Video,
+  Search, Building2, ArrowRight
 } from 'lucide-react'
 import { supabase, isDemoMode } from '../lib/supabase'
 import { useTenant } from '../contexts/TenantContext'
@@ -12,6 +13,7 @@ import { useCustomers } from '../hooks/useCustomers'
 import { Button, Modal, Card, CardHeader, CardContent } from '../components/common'
 import CustomerForm from '../components/customers/CustomerForm'
 import { demoCustomers } from '../lib/demoData'
+import { fetchCompanyData, searchByName, toCustomerData } from '../lib/brreg'
 
 export default function CustomerDetail() {
   const { id } = useParams()
@@ -39,8 +41,20 @@ export default function CustomerDetail() {
   const dateInputRef = useRef(null)
   const lastPickerClose = useRef(0)
 
+  // Convert private customer modal state
+  const [showConvertModal, setShowConvertModal] = useState(false)
+  const [selectedPrivateSale, setSelectedPrivateSale] = useState(null)
+  const [convertSearch, setConvertSearch] = useState('')
+  const [convertLoading, setConvertLoading] = useState(false)
+  const [brregResults, setBrregResults] = useState([])
+  const [selectedCompany, setSelectedCompany] = useState(null)
+  const [brregError, setBrregError] = useState('')
+
   const { activities, createActivity, updateActivity, deleteActivity } = useActivities(id)
-  const { sales, createSale, deleteSale, getTotalSales, getTotalProfit, getMarginPercent } = useSales(id)
+  const { sales, createSale, deleteSale, getTotalSales, getTotalProfit, getMarginPercent, refreshSales } = useSales(id)
+
+  // Check if this is the "Privatkunder" collective customer
+  const isPrivateCustomerCard = customer?.name === 'Privatkunder' && !customer?.org_nr
 
   // Filtrer aktiviteter: kommende (planlagte) vs historiske
   const scheduledActivities = useMemo(() => {
@@ -174,6 +188,141 @@ export default function CustomerDetail() {
       is_completed: true,
       is_scheduled: false
     })
+  }
+
+  // Handle clicking on a private customer sale row
+  const handlePrivateSaleClick = (sale) => {
+    // Extract customer name from description "Privatkunde - Kundenavn"
+    const match = sale.description.match(/^Privatkunde - (.+)$/)
+    const customerName = match ? match[1] : sale.description
+    
+    setSelectedPrivateSale({ ...sale, extractedName: customerName })
+    setConvertSearch(customerName) // Pre-fill with customer name
+    setBrregResults([])
+    setSelectedCompany(null)
+    setBrregError('')
+    setShowConvertModal(true)
+  }
+
+  // Look up company in Brreg (by name or org.nr)
+  const handleBrregLookup = async () => {
+    if (!convertSearch || convertSearch.length < 2) {
+      setBrregError('Skriv minst 2 tegn')
+      return
+    }
+
+    setConvertLoading(true)
+    setBrregError('')
+    setBrregResults([])
+    setSelectedCompany(null)
+
+    try {
+      const cleanSearch = convertSearch.replace(/\s/g, '')
+      
+      // Check if it looks like an org number (9 digits)
+      if (/^\d{9}$/.test(cleanSearch)) {
+        const data = await fetchCompanyData(cleanSearch)
+        if (data) {
+          setBrregResults([data])
+        } else {
+          setBrregError('Fant ingen bedrift med dette org.nr')
+        }
+      } else {
+        // Search by name
+        const results = await searchByName(convertSearch, 10)
+        if (results.length > 0) {
+          setBrregResults(results.map(r => toCustomerData(r)))
+        } else {
+          setBrregError('Fant ingen bedrifter med dette navnet')
+        }
+      }
+    } catch (err) {
+      setBrregError('Kunne ikke søke i Brreg')
+    }
+    setConvertLoading(false)
+  }
+
+  // Convert private customer sales to business customer
+  const handleConvertToBusinessCustomer = async () => {
+    if (!selectedCompany || !selectedPrivateSale) return
+
+    setConvertLoading(true)
+    
+    try {
+      const orgNr = selectedCompany.org_nr.replace(/\s/g, '')
+      
+      // 1. Find or create the business customer
+      let businessCustomerId = null
+      
+      const { data: existingCustomer } = await supabase
+        .from('customers')
+        .select('id, name')
+        .eq('tenant_id', tenant.id)
+        .eq('org_nr', orgNr)
+        .single()
+
+      if (existingCustomer) {
+        businessCustomerId = existingCustomer.id
+      } else {
+        // Create new business customer with Brreg data
+        const { data: newCustomer, error: createError } = await supabase
+          .from('customers')
+          .insert({
+            tenant_id: tenant.id,
+            name: selectedCompany.name,
+            org_nr: orgNr,
+            address: selectedCompany.address,
+            industry: selectedCompany.industry,
+            employee_count: selectedCompany.employee_count
+          })
+          .select('id')
+          .single()
+
+        if (createError) throw createError
+        businessCustomerId = newCustomer.id
+      }
+
+      // 2. Find all sales with the same private customer name and move them
+      const privateCustomerPattern = `Privatkunde - ${selectedPrivateSale.extractedName}`
+      
+      const { data: salesToMove, error: fetchError } = await supabase
+        .from('sales')
+        .select('id')
+        .eq('customer_id', id) // Current "Privatkunder" customer
+        .eq('description', privateCustomerPattern)
+
+      if (fetchError) throw fetchError
+
+      if (salesToMove && salesToMove.length > 0) {
+        // Update all matching sales to point to the business customer
+        const saleIds = salesToMove.map(s => s.id)
+        
+        const { error: updateError } = await supabase
+          .from('sales')
+          .update({ 
+            customer_id: businessCustomerId,
+            description: `Import (konvertert fra privatkunde)`
+          })
+          .in('id', saleIds)
+
+        if (updateError) throw updateError
+      }
+
+      // 3. Refresh sales and close modal
+      await refreshSales()
+      setShowConvertModal(false)
+      setSelectedPrivateSale(null)
+      
+      // Show success and offer to navigate to the new customer
+      if (confirm(`${salesToMove?.length || 0} salg ble flyttet til ${selectedCompany.name}.\n\nVil du gå til kundekortet?`)) {
+        navigate(`/customers/${businessCustomerId}`)
+      }
+
+    } catch (err) {
+      setBrregError('Kunne ikke konvertere: ' + err.message)
+    }
+    
+    setConvertLoading(false)
   }
 
   const formatCurrency = (amount) => {
@@ -418,7 +567,52 @@ export default function CustomerDetail() {
                 </div>
               </div>
             </div>
-            {sales.length === 0 && (
+
+            {/* Sales List */}
+            {sales.length > 0 ? (
+              <div className="sales-list">
+                <h4 className="sales-list-title">
+                  Salgshistorikk ({sales.length} transaksjoner)
+                  {isPrivateCustomerCard && (
+                    <span className="sales-list-hint">Klikk på en rad for å konvertere til bedriftskunde</span>
+                  )}
+                </h4>
+                <div className="sales-list-wrapper">
+                  <table className={`sales-table ${isPrivateCustomerCard ? 'clickable' : ''}`}>
+                    <thead>
+                      <tr>
+                        <th>Dato</th>
+                        <th>Beskrivelse</th>
+                        <th className="text-right">Beløp</th>
+                        <th className="text-right">Fortjeneste</th>
+                        {isPrivateCustomerCard && <th></th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sales.map(sale => (
+                        <tr 
+                          key={sale.id}
+                          onClick={isPrivateCustomerCard ? () => handlePrivateSaleClick(sale) : undefined}
+                          className={isPrivateCustomerCard ? 'clickable-row' : ''}
+                        >
+                          <td className="sale-date">
+                            {new Date(sale.sale_date).toLocaleDateString('nb-NO')}
+                          </td>
+                          <td className="sale-description">{sale.description}</td>
+                          <td className="sale-amount text-right">{formatCurrency(sale.amount)}</td>
+                          <td className="sale-profit text-right">{formatCurrency(sale.profit || 0)}</td>
+                          {isPrivateCustomerCard && (
+                            <td className="sale-convert-hint">
+                              <Building2 size={16} />
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
               <p className="empty-text">Ingen salgsdata importert ennå</p>
             )}
           </CardContent>
@@ -603,6 +797,108 @@ export default function CustomerDetail() {
           onSubmit={handleUpdate} 
           onCancel={() => setShowEdit(false)} 
         />
+      </Modal>
+
+      {/* Convert Private Customer Modal */}
+      <Modal
+        isOpen={showConvertModal}
+        onClose={() => setShowConvertModal(false)}
+        title="Konverter til bedriftskunde"
+      >
+        {selectedPrivateSale && (
+          <div className="convert-modal">
+            <div className="convert-info">
+              <p className="convert-customer-name">
+                <User size={18} />
+                {selectedPrivateSale.extractedName}
+              </p>
+              <p className="convert-sale-info">
+                Salg: {formatCurrency(selectedPrivateSale.amount)} ({new Date(selectedPrivateSale.sale_date).toLocaleDateString('nb-NO')})
+              </p>
+            </div>
+
+            <div className="convert-search">
+              <label>Søk opp bedrift (navn eller org.nr)</label>
+              <div className="convert-search-row">
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Bedriftsnavn eller 123 456 789"
+                  value={convertSearch}
+                  onChange={(e) => setConvertSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleBrregLookup()}
+                />
+                <Button 
+                  onClick={handleBrregLookup} 
+                  disabled={convertLoading || !convertSearch}
+                >
+                  <Search size={18} />
+                  Søk
+                </Button>
+              </div>
+              {brregError && <p className="convert-error">{brregError}</p>}
+            </div>
+
+            {/* Search results list */}
+            {brregResults.length > 0 && !selectedCompany && (
+              <div className="convert-results-list">
+                <p className="results-count">{brregResults.length} bedrifter funnet</p>
+                <ul className="company-list">
+                  {brregResults.map((company, index) => (
+                    <li 
+                      key={index} 
+                      className="company-list-item"
+                      onClick={() => setSelectedCompany(company)}
+                    >
+                      <Building2 size={18} />
+                      <div className="company-list-info">
+                        <span className="company-list-name">{company.name}</span>
+                        <span className="company-list-details">
+                          {company.org_nr}
+                          {company.industry && ` • ${company.industry}`}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Selected company */}
+            {selectedCompany && (
+              <div className="convert-result">
+                <div className="convert-company-card">
+                  <Building2 size={24} />
+                  <div>
+                    <p className="company-name">{selectedCompany.name}</p>
+                    <p className="company-org-nr">{selectedCompany.org_nr}</p>
+                    <p className="company-details">
+                      {selectedCompany.industry && <span>{selectedCompany.industry}</span>}
+                      {selectedCompany.employee_count && <span>{selectedCompany.employee_count} ansatte</span>}
+                    </p>
+                    {selectedCompany.address && <p className="company-address">{selectedCompany.address}</p>}
+                  </div>
+                  <button 
+                    className="btn-change-company"
+                    onClick={() => setSelectedCompany(null)}
+                  >
+                    Endre
+                  </button>
+                </div>
+                
+                <div className="convert-action">
+                  <p className="convert-description">
+                    Alle salg fra "<strong>{selectedPrivateSale.extractedName}</strong>" vil bli flyttet til denne bedriften.
+                  </p>
+                  <Button onClick={handleConvertToBusinessCustomer} disabled={convertLoading}>
+                    <ArrowRight size={18} />
+                    {convertLoading ? 'Konverterer...' : 'Flytt salg til bedrift'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   )
