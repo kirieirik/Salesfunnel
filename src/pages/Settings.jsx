@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Building2, Users, Plus, Trash2, UserPlus, User, Save, Loader2 } from 'lucide-react'
+import { Building2, Users, Plus, Trash2, UserPlus, User, Save, Loader2, Mail, Check, X, RefreshCw } from 'lucide-react'
 import { supabase, isDemoMode } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useTenant } from '../contexts/TenantContext'
@@ -27,11 +27,27 @@ export default function Settings() {
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileSuccess, setProfileSuccess] = useState(false)
 
+  // Email sync state
+  const [imapEmail, setImapEmail] = useState('')
+  const [imapPassword, setImapPassword] = useState('')
+  const [emailSyncEnabled, setEmailSyncEnabled] = useState(false)
+  const [emailSyncStatus, setEmailSyncStatus] = useState('not_configured') // not_configured, testing, connected, error
+  const [emailSyncError, setEmailSyncError] = useState('')
+  const [emailSyncSaving, setEmailSyncSaving] = useState(false)
+  const [lastSyncTime, setLastSyncTime] = useState(null)
+
   useEffect(() => {
     if (profile) {
       setFirstName(profile.first_name || '')
       setLastName(profile.last_name || '')
       setPhone(profile.phone || '')
+      // Load email sync settings
+      setImapEmail(profile.imap_email || '')
+      setEmailSyncEnabled(profile.email_sync_enabled || false)
+      setLastSyncTime(profile.last_email_sync || null)
+      if (profile.email_sync_enabled && profile.imap_email) {
+        setEmailSyncStatus('connected')
+      }
     }
   }, [profile])
 
@@ -141,6 +157,118 @@ export default function Settings() {
       setProfileSuccess(true)
       setTimeout(() => setProfileSuccess(false), 3000)
     }
+  }
+
+  // Test IMAP connection and save credentials
+  const handleTestEmailConnection = async () => {
+    if (!imapEmail || !imapPassword) {
+      setEmailSyncError('Fyll inn e-post og passord')
+      return
+    }
+
+    setEmailSyncSaving(true)
+    setEmailSyncStatus('testing')
+    setEmailSyncError('')
+
+    try {
+      // Call Edge Function to test IMAP connection
+      console.log('Calling test-imap-connection...')
+      const { data, error } = await supabase.functions.invoke('test-imap-connection', {
+        body: {
+          email: imapEmail,
+          password: imapPassword,
+          server: 'mail.uniweb.no',
+          port: 993
+        }
+      })
+
+      console.log('Response:', { data, error })
+
+      if (error) {
+        console.error('Function error:', error)
+        throw new Error(error.message || 'Kunne ikke nå e-posttjenesten')
+      }
+
+      if (!data) {
+        throw new Error('Ingen respons fra serveren')
+      }
+
+      if (data.success) {
+        // Save credentials to profile (password will be encrypted by Edge Function)
+        console.log('Test successful, saving profile...')
+        const { error: saveError } = await updateProfile({
+          imap_email: imapEmail,
+          email_sync_enabled: true
+        })
+
+        if (saveError) {
+          console.error('Profile save error:', saveError)
+          throw saveError
+        }
+
+        // Store encrypted password separately via Edge Function
+        console.log('Calling save-imap-credentials...')
+        const { data: saveData, error: saveCredsError } = await supabase.functions.invoke('save-imap-credentials', {
+          body: {
+            email: imapEmail,
+            password: imapPassword
+          }
+        })
+        
+        console.log('save-imap-credentials response:', { saveData, saveCredsError })
+        
+        if (saveCredsError) {
+          console.error('Save credentials error:', saveCredsError)
+          throw new Error('Kunne ikke lagre e-postinnstillinger')
+        }
+        
+        if (saveData && !saveData.success) {
+          console.error('Save credentials failed:', saveData.error)
+          throw new Error(saveData.error || 'Kunne ikke lagre e-postinnstillinger')
+        }
+
+        setEmailSyncStatus('connected')
+        setEmailSyncEnabled(true)
+        setImapPassword('') // Clear password from form
+        console.log('Email sync setup complete!')
+      } else {
+        throw new Error(data.error || 'Kunne ikke koble til e-postserveren')
+      }
+    } catch (err) {
+      console.error('Setup error:', err)
+      setEmailSyncStatus('error')
+      setEmailSyncError(err.message || 'Tilkobling feilet')
+    }
+
+    setEmailSyncSaving(false)
+  }
+
+  // Disable email sync
+  const handleDisableEmailSync = async () => {
+    if (!confirm('Er du sikker på at du vil deaktivere e-postsynkronisering?')) return
+
+    setEmailSyncSaving(true)
+    
+    try {
+      const { error } = await updateProfile({
+        email_sync_enabled: false,
+        imap_email: null
+      })
+
+      if (error) throw error
+
+      // Clear credentials via Edge Function
+      await supabase.functions.invoke('clear-imap-credentials', {})
+
+      setEmailSyncStatus('not_configured')
+      setEmailSyncEnabled(false)
+      setImapEmail('')
+      setImapPassword('')
+    } catch (err) {
+      setEmailSyncError(err.message)
+    }
+
+    setEmailSyncSaving(false)
   }
 
   return (
@@ -274,6 +402,96 @@ export default function Settings() {
                 )}
               </Button>
             </form>
+          </CardContent>
+        </Card>
+
+        {/* Email Sync */}
+        <Card className="email-sync-card">
+          <CardHeader>
+            <h3>
+              <Mail size={20} />
+              E-postsynkronisering
+            </h3>
+            {emailSyncStatus === 'connected' && (
+              <span className="sync-status connected">
+                <Check size={16} />
+                Tilkoblet
+              </span>
+            )}
+          </CardHeader>
+          <CardContent>
+            <p className="email-sync-description">
+              Koble til din e-post for å automatisk logge all korrespondanse med kunder på deres kundekort.
+            </p>
+
+            {emailSyncStatus === 'connected' ? (
+              <div className="email-sync-active">
+                <div className="sync-info">
+                  <div className="sync-email">
+                    <Mail size={16} />
+                    <span>{imapEmail || profile?.imap_email}</span>
+                  </div>
+                  {lastSyncTime && (
+                    <p className="last-sync">
+                      Sist synkronisert: {new Date(lastSyncTime).toLocaleString('nb-NO')}
+                    </p>
+                  )}
+                </div>
+                <Button 
+                  variant="secondary" 
+                  size="sm"
+                  onClick={handleDisableEmailSync}
+                  disabled={emailSyncSaving}
+                >
+                  <X size={16} />
+                  Deaktiver
+                </Button>
+              </div>
+            ) : (
+              <div className="email-sync-setup">
+                <div className="imap-server-info">
+                  <p><strong>Server:</strong> mail.uniweb.no</p>
+                  <p><strong>Port:</strong> 143 (STARTTLS)</p>
+                </div>
+
+                {emailSyncError && (
+                  <div className="alert alert-error">{emailSyncError}</div>
+                )}
+
+                <Input
+                  label="E-postadresse"
+                  type="email"
+                  value={imapEmail}
+                  onChange={(e) => setImapEmail(e.target.value)}
+                  placeholder="din@epost.no"
+                />
+
+                <Input
+                  label="Passord"
+                  type="password"
+                  value={imapPassword}
+                  onChange={(e) => setImapPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+
+                <Button 
+                  onClick={handleTestEmailConnection}
+                  disabled={emailSyncSaving || !imapEmail || !imapPassword}
+                >
+                  {emailSyncSaving ? (
+                    <>
+                      <Loader2 size={16} className="spinner" />
+                      {emailSyncStatus === 'testing' ? 'Tester tilkobling...' : 'Lagrer...'}
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw size={16} />
+                      Test og aktiver
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

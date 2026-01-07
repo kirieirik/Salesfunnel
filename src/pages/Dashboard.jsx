@@ -1,13 +1,16 @@
 import { useState, useMemo } from 'react'
-import { Users, DollarSign, Activity, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Users, DollarSign, Activity, ChevronLeft, ChevronRight, Mail, Send } from 'lucide-react'
 import { useCustomers } from '../hooks/useCustomers'
 import { useSales } from '../hooks/useSales'
 import { useActivities } from '../hooks/useActivities'
 import { useTenant } from '../contexts/TenantContext'
+import { useAuth } from '../contexts/AuthContext'
 import Card, { CardContent, CardHeader } from '../components/common/Card'
 
 export default function Dashboard() {
   const { tenant } = useTenant()
+  const { user } = useAuth()
   const { customers } = useCustomers()
   const { sales, getTotalSales, getSalesByMonth } = useSales()
   const { activities } = useActivities()
@@ -18,6 +21,14 @@ export default function Dashboard() {
   const totalSales = getTotalSales()
   const salesByMonth = getSalesByMonth()
   const recentActivities = activities.slice(0, 5)
+
+  // Beregn totalt salg for inneværende år
+  const currentYear = new Date().getFullYear()
+  const totalSalesThisYear = useMemo(() => {
+    return sales
+      .filter(sale => new Date(sale.sale_date).getFullYear() === currentYear)
+      .reduce((sum, sale) => sum + (sale.amount || 0), 0)
+  }, [sales, currentYear])
 
   // Filtrer salg for valgt år
   const salesByMonthForYear = useMemo(() => {
@@ -76,8 +87,8 @@ export default function Dashboard() {
               <DollarSign size={24} />
             </div>
             <div className="stat-info">
-              <span className="stat-value">{formatCurrency(totalSales)}</span>
-              <span className="stat-label">Totalt salg</span>
+              <span className="stat-value">{formatCurrency(totalSalesThisYear)}</span>
+              <span className="stat-label">Salg i {currentYear}</span>
             </div>
           </CardContent>
         </Card>
@@ -106,18 +117,33 @@ export default function Dashboard() {
               <p className="empty-text">Ingen aktiviteter ennå</p>
             ) : (
               <ul className="activity-list">
-                {recentActivities.map(activity => (
-                  <li key={activity.id} className="activity-item">
-                    <span className={`activity-type type-${activity.type}`}>
-                      {activity.type}
-                    </span>
-                    <div className="activity-details">
-                      <strong>{activity.customer?.name}</strong>
-                      <p>{activity.description}</p>
-                      <small>{new Date(activity.activity_date).toLocaleDateString('nb-NO')}</small>
-                    </div>
-                  </li>
-                ))}
+                {recentActivities.map(activity => {
+                  const isSentEmail = activity.type === 'email' && activity.description?.includes('sendt')
+                  const isReceivedEmail = activity.type === 'email' && activity.description?.includes('mottatt')
+                  
+                  return (
+                    <li key={activity.id} className="activity-item">
+                      <span className={`activity-type ${isSentEmail ? 'type-email-sent' : isReceivedEmail ? 'type-email-received' : `type-${activity.type}`}`}>
+                        {activity.type === 'email' && (isSentEmail ? <Send size={12} /> : <Mail size={12} />)}
+                        {activity.type}
+                      </span>
+                      <div className="activity-details">
+                        {activity.customer?.id ? (
+                          <Link to={`/customers/${activity.customer.id}`} className="customer-link">
+                            {activity.customer?.name}
+                          </Link>
+                        ) : (
+                          <strong>{activity.customer?.name}</strong>
+                        )}
+                        <p>{activity.description}</p>
+                        <small>
+                          {new Date(activity.activity_date).toLocaleDateString('nb-NO')}
+                          {activity.content && <span className="activity-meta"> • {activity.content}</span>}
+                        </small>
+                      </div>
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </CardContent>

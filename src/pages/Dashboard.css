@@ -66,25 +66,61 @@
 }
 
 .activity-type {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   padding: var(--spacing-xs) var(--spacing-sm);
   border-radius: var(--radius-sm);
   font-size: 0.75rem;
   font-weight: 500;
   text-transform: uppercase;
+  height: fit-content;
+}
+
+/* Sendt e-post - grønn */
+.type-email-sent {
+  background: #d1fae5;
+  color: #047857;
+}
+
+/* Mottatt e-post - blå */
+.type-email-received {
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 
 .activity-details {
   flex: 1;
+  min-width: 0;
+}
+
+.activity-details .customer-link {
+  color: var(--color-text);
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.activity-details .customer-link:hover {
+  color: var(--color-primary);
+  text-decoration: underline;
 }
 
 .activity-details p {
   color: var(--color-text-light);
   font-size: 0.875rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .activity-details small {
   color: var(--color-text-light);
   font-size: 0.75rem;
+}
+
+.activity-meta {
+  color: var(--color-text-lighter, #9ca3af);
 }
 
 /* Sales List */
