@@ -58,6 +58,9 @@ export function AuthProvider({ children }) {
       return { error: null }
     }
     const { error } = await supabase.auth.signOut()
+    if (!error) {
+      setUser(null)
+    }
     return { error }
   }
 
