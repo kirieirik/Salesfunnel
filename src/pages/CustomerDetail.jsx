@@ -634,7 +634,6 @@ export default function CustomerDetail() {
                 >
                   <option value="note">Notat</option>
                   <option value="call">Samtale</option>
-                  <option value="email">E-post</option>
                   <option value="meeting">Møte</option>
                 </select>
               <div 
