@@ -8,6 +8,8 @@
   grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
   gap: var(--spacing-md);
   margin-bottom: var(--spacing-lg);
+  width: 100%;
+  max-width: 100%;
 }
 
 .stat-card .card-content {
@@ -32,6 +34,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  overflow: hidden;
 }
 
 .stat-value {
@@ -52,6 +55,8 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(350px, 100%), 1fr));
   gap: var(--spacing-lg);
+  width: 100%;
+  max-width: 100%;
 }
 
 /* Activity List */
@@ -80,6 +85,7 @@
   font-weight: 500;
   text-transform: uppercase;
   height: fit-content;
+  flex-shrink: 0;
 }
 
 /* Sendt e-post - grønn */
@@ -191,6 +197,56 @@
 
 @media (max-width: 768px) {
   .dashboard-grid {
+    grid-template-columns: 1fr;
+    width: 100%;
+    max-width: 100%;
+  }
+  
+  .dashboard-grid .card {
+    max-width: 100%;
+    overflow: hidden;
+  }
+  
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .stat-card .card-content {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--spacing-md);
+  }
+  
+  .stat-icon {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .stat-value {
+    font-size: 1.25rem;
+  }
+  
+  .activity-item {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+  
+  .activity-type {
+    align-self: flex-start;
+  }
+  
+  .activity-list {
+    max-width: 100%;
+    overflow: hidden;
+  }
+  
+  .sales-list {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
     grid-template-columns: 1fr;
   }
 }

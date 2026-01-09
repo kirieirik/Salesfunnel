@@ -78,13 +78,15 @@
     left: 0;
     right: 0;
     bottom: 0;
-    width: 100%;
+    width: 100vw;
+    max-width: 100%;
     height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
     padding-bottom: env(safe-area-inset-bottom);
     flex-direction: row;
     transform: none;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
     z-index: 1000;
+    overflow: hidden;
   }
   
   .sidebar-header,
