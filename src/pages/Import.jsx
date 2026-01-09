@@ -39,7 +39,9 @@ export default function Import() {
   const [csvData, setCsvData] = useState([])
   const [headers, setHeaders] = useState([])
   const [mapping, setMapping] = useState({})
+  const [periodType, setPeriodType] = useState('month') // 'month' eller 'week'
   const [importMonth, setImportMonth] = useState('')
+  const [importWeek, setImportWeek] = useState('')
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState(null)
   const [error, setError] = useState('')
@@ -292,8 +294,13 @@ export default function Import() {
       return false
     }
     
-    if (!importMonth) {
+    if (periodType === 'month' && !importMonth) {
       setError('Du må velge måned for import')
+      return false
+    }
+    
+    if (periodType === 'week' && !importWeek) {
+      setError('Du må velge uke for import')
       return false
     }
     
@@ -319,20 +326,49 @@ export default function Import() {
       errors: []
     }
 
-    // Beregn første og siste dag i valgt måned
-    const [year, month] = importMonth.split('-')
-    const monthStart = `${importMonth}-01`
-    const monthEnd = new Date(parseInt(year), parseInt(month), 0).toISOString().split('T')[0]
+    // Beregn start og slutt basert på periodetype
+    let periodStart, periodEnd, saleDate, importRef
+    
+    if (periodType === 'week') {
+      // Uke-format: "2026-W02"
+      const [weekYear, weekNum] = importWeek.split('-W')
+      const year = parseInt(weekYear)
+      const week = parseInt(weekNum)
+      
+      // Beregn første dag i uken (mandag)
+      const jan4 = new Date(year, 0, 4)
+      const dayOfWeek = jan4.getDay() || 7
+      const firstMonday = new Date(jan4)
+      firstMonday.setDate(jan4.getDate() - dayOfWeek + 1)
+      
+      const weekStart = new Date(firstMonday)
+      weekStart.setDate(firstMonday.getDate() + (week - 1) * 7)
+      
+      const weekEnd = new Date(weekStart)
+      weekEnd.setDate(weekStart.getDate() + 6)
+      
+      periodStart = weekStart.toISOString().split('T')[0]
+      periodEnd = weekEnd.toISOString().split('T')[0]
+      saleDate = periodEnd // Bruk siste dag i uken som salgsdato
+      importRef = `import_${importWeek}`
+    } else {
+      // Måned-format: "2026-01"
+      const [year, month] = importMonth.split('-')
+      periodStart = `${importMonth}-01`
+      periodEnd = new Date(parseInt(year), parseInt(month), 0).toISOString().split('T')[0]
+      saleDate = periodEnd // Bruk siste dag i måneden som salgsdato
+      importRef = `import_${importMonth}`
+    }
 
     try {
-      // Først: Slett eksisterende salg for denne måneden (for denne tenant)
+      // Først: Slett eksisterende salg for denne perioden (for denne tenant)
       if (!isDemoMode) {
         const { data: deletedSales, error: deleteError } = await supabase
           .from('sales')
           .delete()
           .eq('tenant_id', tenant.id)
-          .gte('sale_date', monthStart)
-          .lte('sale_date', monthEnd)
+          .gte('sale_date', periodStart)
+          .lte('sale_date', periodEnd)
           .select('id')
 
         if (deleteError) {
@@ -492,6 +528,7 @@ export default function Import() {
             const totalProfit = parseNorwegianNumber(getMappedValue(row, 'total_profit')) || (totalSales - totalCost)
 
             if (totalSales > 0) {
+              const periodLabel = periodType === 'week' ? importWeek : importMonth
               const { error: salesError } = await supabase
                 .from('sales')
                 .insert({
@@ -499,9 +536,9 @@ export default function Import() {
                   customer_id: customerId,
                   amount: totalSales,
                   profit: totalProfit,
-                  sale_date: monthEnd,
-                  description: isPrivateCustomer ? `Privatkunde - ${customerName || 'Ukjent'}` : `Import ${importMonth}`,
-                  import_ref: `import_${importMonth}`
+                  sale_date: saleDate,
+                  description: isPrivateCustomer ? `Privatkunde - ${customerName || 'Ukjent'}` : `Import ${periodLabel}`,
+                  import_ref: importRef
                 })
 
               if (salesError) throw salesError
@@ -532,7 +569,9 @@ export default function Import() {
     setCsvData([])
     setHeaders([])
     setMapping({})
+    setPeriodType('month')
     setImportMonth('')
+    setImportWeek('')
     setImportResult(null)
     setError('')
     if (fileInputRef.current) {
@@ -719,18 +758,53 @@ export default function Import() {
 
           <Card>
             <CardHeader>
-              <h3>Måned for import</h3>
+              <h3>Periode for import</h3>
             </CardHeader>
             <CardContent>
               <div className="period-selector">
-                <Input
-                  label="Velg måned"
-                  type="month"
-                  value={importMonth}
-                  onChange={(e) => setImportMonth(e.target.value)}
-                />
+                <div className="period-type-toggle">
+                  <label className={`period-type-option ${periodType === 'month' ? 'active' : ''}`}>
+                    <input
+                      type="radio"
+                      name="periodType"
+                      value="month"
+                      checked={periodType === 'month'}
+                      onChange={(e) => setPeriodType(e.target.value)}
+                    />
+                    <span>Måned</span>
+                  </label>
+                  <label className={`period-type-option ${periodType === 'week' ? 'active' : ''}`}>
+                    <input
+                      type="radio"
+                      name="periodType"
+                      value="week"
+                      checked={periodType === 'week'}
+                      onChange={(e) => setPeriodType(e.target.value)}
+                    />
+                    <span>Uke</span>
+                  </label>
+                </div>
+                
+                {periodType === 'month' ? (
+                  <Input
+                    label="Velg måned"
+                    type="month"
+                    value={importMonth}
+                    onChange={(e) => setImportMonth(e.target.value)}
+                  />
+                ) : (
+                  <Input
+                    label="Velg uke"
+                    type="week"
+                    value={importWeek}
+                    onChange={(e) => setImportWeek(e.target.value)}
+                  />
+                )}
+                
                 <p className="period-hint">
-                  Eksisterende salgsdata for denne måneden vil bli erstattet ved import.
+                  {periodType === 'month' 
+                    ? 'Eksisterende salgsdata for denne måneden vil bli erstattet ved import.'
+                    : 'Eksisterende salgsdata for denne uken vil bli erstattet ved import. Andre uker påvirkes ikke.'}
                 </p>
               </div>
             </CardContent>

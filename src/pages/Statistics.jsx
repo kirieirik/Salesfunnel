@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
-import { TrendingUp, Users, DollarSign, Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { TrendingUp, Users, DollarSign, Calendar, ChevronLeft, ChevronRight, UserPlus } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell, Treemap } from 'recharts'
 import { useCustomers } from '../hooks/useCustomers'
 import { useSales } from '../hooks/useSales'
@@ -89,6 +90,44 @@ export default function Statistics() {
     
     return { totalSales, totalProfit, marginPercent }
   }, [filteredSales])
+
+  // Nye kunder per måned (basert på created_at)
+  const newCustomersByMonth = useMemo(() => {
+    const monthData = {}
+    
+    customers.forEach(customer => {
+      if (!customer.created_at) return
+      const date = new Date(customer.created_at)
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      
+      if (!monthData[monthKey]) {
+        monthData[monthKey] = []
+      }
+      monthData[monthKey].push(customer)
+    })
+    
+    // Sorter måneder synkende
+    return Object.entries(monthData)
+      .map(([month, custs]) => ({
+        month,
+        count: custs.length,
+        customers: custs
+      }))
+      .sort((a, b) => b.month.localeCompare(a.month))
+  }, [customers])
+
+  // Nye kunder for valgt periode
+  const newCustomersInPeriod = useMemo(() => {
+    return customers.filter(c => {
+      if (!c.created_at) return false
+      const createdMonth = c.created_at.substring(0, 7)
+      if (viewMode === 'month') {
+        return createdMonth === selectedMonth
+      } else {
+        return createdMonth.startsWith(String(selectedYear))
+      }
+    })
+  }, [customers, viewMode, selectedMonth, selectedYear])
 
   // Data for kakediagram
   const pieData = useMemo(() => {
@@ -266,8 +305,8 @@ export default function Statistics() {
         </CardContent>
       </Card>
 
-      {/* Stats Cards */}
-      <div className="stats-grid">
+      {/* Stats Cards - inkludert nye kunder */}
+      <div className="stats-grid stats-grid-5">
         <Card className="stat-card">
           <CardContent>
             <div className="stat-icon">
@@ -312,6 +351,18 @@ export default function Statistics() {
             <div className="stat-info">
               <span className="stat-value">{pieData.length}</span>
               <span className="stat-label">Kunder med salg</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="stat-card">
+          <CardContent>
+            <div className="stat-icon new-customers">
+              <UserPlus size={24} />
+            </div>
+            <div className="stat-info">
+              <span className="stat-value">{newCustomersInPeriod.length}</span>
+              <span className="stat-label">Nye kunder</span>
             </div>
           </CardContent>
         </Card>
@@ -410,6 +461,36 @@ export default function Statistics() {
                     <span className="profit">{formatCurrency(customer.profit)}</span>
                     <span className="margin">{customer.margin.toFixed(1)}%</span>
                     <span className="share">{((customer.value / periodStats.totalSales) * 100).toFixed(1)}%</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Nye kunder denne perioden */}
+      <Card className="full-width-card">
+        <CardHeader>
+          <h3>
+            <UserPlus size={20} style={{ marginRight: '8px' }} />
+            Nye kunder {viewMode === 'month' ? 'denne måneden' : 'dette året'}
+          </h3>
+        </CardHeader>
+        <CardContent>
+          {newCustomersInPeriod.length === 0 ? (
+            <p className="empty-text">Ingen nye kunder registrert i denne perioden</p>
+          ) : (
+            <div className="new-customers-list-container">
+              <ul className="new-customers-simple-list">
+                {newCustomersInPeriod.map(customer => (
+                  <li key={customer.id} className="new-customer-simple-item">
+                    <Link to={`/customers/${customer.id}`} className="customer-link">
+                      {customer.name}
+                    </Link>
+                    <span className="customer-date">
+                      Registrert {new Date(customer.created_at).toLocaleDateString('nb-NO')}
+                    </span>
                   </li>
                 ))}
               </ul>
