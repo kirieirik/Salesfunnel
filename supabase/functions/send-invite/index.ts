@@ -10,16 +10,21 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
+  console.log('send-invite: Function called, method:', req.method)
+  
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
+    console.log('send-invite: Starting...')
+    
     // Get auth token from request
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
       throw new Error('Ikke autorisert')
     }
+    console.log('send-invite: Auth header found')
 
     // Initialize Supabase client with user's token
     const supabaseClient = createClient(
@@ -31,8 +36,10 @@ serve(async (req) => {
     // Get current user
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
     if (userError || !user) {
+      console.error('send-invite: User error:', userError)
       throw new Error('Kunne ikke hente bruker')
     }
+    console.log('send-invite: User found:', user.id)
 
     // Get user's profile with tenant info
     const { data: profile, error: profileError } = await supabaseClient
@@ -41,9 +48,11 @@ serve(async (req) => {
       .eq('id', user.id)
       .single()
 
+    console.log('send-invite: Profile result:', { profile, profileError })
+
     if (profileError) {
       console.error('Profile error:', profileError)
-      throw new Error('Kunne ikke hente profil')
+      throw new Error('Kunne ikke hente profil: ' + profileError.message)
     }
     
     if (!profile?.tenant_id) {
@@ -54,8 +63,12 @@ serve(async (req) => {
     if (!['owner', 'admin'].includes(profile.role)) {
       throw new Error('Du har ikke tilgang til å invitere brukere')
     }
+    console.log('send-invite: User role OK:', profile.role)
 
-    const { email, role } = await req.json()
+    // Parse request body
+    const body = await req.json()
+    const { email, role } = body
+    console.log('send-invite: Request body:', { email, role })
 
     if (!email || !email.includes('@')) {
       throw new Error('Ugyldig e-postadresse')
