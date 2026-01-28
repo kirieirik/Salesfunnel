@@ -143,3 +143,67 @@
   background: var(--color-border);
 }
 
+/* Invitation styles */
+.invitation-icon {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.invitation-details {
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.invitation-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm) 0;
+}
+
+.invitation-info:not(:last-child) {
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.invitation-info .label {
+  color: var(--color-text-light);
+  font-size: 0.875rem;
+}
+
+.invitation-info .value {
+  font-weight: 500;
+}
+
+.role-badge {
+  font-size: 0.75rem;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+}
+
+.role-badge.role-admin {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.role-badge.role-member {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.text-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-light);
+  font-size: 0.875rem;
+  cursor: pointer;
+  margin-top: var(--spacing-md);
+  text-decoration: underline;
+  width: 100%;
+  text-align: center;
+}
+
+.text-btn:hover {
+  color: var(--color-primary);
+}

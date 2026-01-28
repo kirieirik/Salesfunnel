@@ -1,16 +1,24 @@
 import { useState } from 'react'
-import { Navigate, Link } from 'react-router-dom'
+import { Navigate, Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { Button, Input } from '../../components/common'
 
 export default function Login() {
   const { user, signIn } = useAuth()
+  const [searchParams] = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  
+  // Get invite token from URL if present
+  const inviteToken = searchParams.get('invite')
 
   if (user) {
+    // If user is logged in and has invite token, redirect to onboarding with token
+    if (inviteToken) {
+      return <Navigate to={`/onboarding?invite=${inviteToken}`} replace />
+    }
     return <Navigate to="/" replace />
   }
 

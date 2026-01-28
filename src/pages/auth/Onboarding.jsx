@@ -1,11 +1,19 @@
 import { useState, useEffect } from 'react'
-import { Building2, ArrowRight, Loader2, User } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { Building2, ArrowRight, Loader2, User, UserPlus, Check } from 'lucide-react'
 import { useTenant } from '../../contexts/TenantContext'
+import { useAuth } from '../../contexts/AuthContext'
+import { supabase, isDemoMode } from '../../lib/supabase'
 import { Button, Input } from '../../components/common'
 import './Auth.css'
 
 export default function Onboarding() {
-  const { createTenant, updateProfile, profile, tenant } = useTenant()
+  const { createTenant, updateProfile, profile, tenant, refreshTenant } = useTenant()
+  const { user } = useAuth()
+  const [searchParams] = useSearchParams()
+  
+  // Check for invitation token in URL
+  const inviteToken = searchParams.get('invite')
   
   // Sjekk om profil er komplett for å hoppe direkte til steg 2
   const profileComplete = profile?.first_name && profile?.last_name
@@ -19,13 +27,71 @@ export default function Onboarding() {
   const [companyName, setCompanyName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  
+  // Invitation state
+  const [pendingInvitation, setPendingInvitation] = useState(null)
+  const [checkingInvitation, setCheckingInvitation] = useState(true)
+  const [acceptingInvitation, setAcceptingInvitation] = useState(false)
+
+  // Check for pending invitations when component mounts
+  useEffect(() => {
+    const checkInvitation = async () => {
+      if (isDemoMode || !user?.email) {
+        setCheckingInvitation(false)
+        return
+      }
+      
+      try {
+        // First check URL token, then check for any pending invitation
+        if (inviteToken) {
+          const { data: invite } = await supabase
+            .from('invitations')
+            .select('*, tenants(name)')
+            .eq('token', inviteToken)
+            .eq('status', 'pending')
+            .single()
+          
+          if (invite && new Date(invite.expires_at) > new Date()) {
+            setPendingInvitation({
+              ...invite,
+              tenant_name: invite.tenants?.name
+            })
+          }
+        } else {
+          // Check if user has any pending invitation by email
+          const { data: invite } = await supabase
+            .from('invitations')
+            .select('*, tenants(name)')
+            .eq('email', user.email.toLowerCase())
+            .eq('status', 'pending')
+            .gt('expires_at', new Date().toISOString())
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single()
+          
+          if (invite) {
+            setPendingInvitation({
+              ...invite,
+              tenant_name: invite.tenants?.name
+            })
+          }
+        }
+      } catch (err) {
+        // No invitation found, continue with normal flow
+      }
+      
+      setCheckingInvitation(false)
+    }
+    
+    checkInvitation()
+  }, [user?.email, inviteToken])
 
   // Hvis profil allerede er komplett, hopp til steg 2
   useEffect(() => {
-    if (profileComplete && step === 1 && !tenant) {
+    if (profileComplete && step === 1 && !tenant && !pendingInvitation) {
       setStep(2)
     }
-  }, [profileComplete])
+  }, [profileComplete, pendingInvitation])
 
   const handleStep1 = async (e) => {
     e.preventDefault()
@@ -58,6 +124,55 @@ export default function Onboarding() {
       return
     }
     
+    // If there's a pending invitation, go to invitation step
+    if (pendingInvitation) {
+      setStep(3) // Invitation acceptance step
+      return
+    }
+    
+    setStep(2)
+  }
+
+  const handleAcceptInvitation = async () => {
+    if (!pendingInvitation) return
+    
+    setAcceptingInvitation(true)
+    setError('')
+    
+    try {
+      // Update profile with tenant and role from invitation
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          tenant_id: pendingInvitation.tenant_id,
+          role: pendingInvitation.role
+        })
+        .eq('id', user.id)
+      
+      if (updateError) throw updateError
+      
+      // Mark invitation as accepted
+      await supabase
+        .from('invitations')
+        .update({ 
+          status: 'accepted',
+          accepted_at: new Date().toISOString()
+        })
+        .eq('id', pendingInvitation.id)
+      
+      // Refresh tenant context to pick up the new tenant
+      await refreshTenant()
+      
+      // The app should now redirect automatically
+    } catch (err) {
+      setError('Kunne ikke akseptere invitasjonen. Prøv igjen.')
+      setAcceptingInvitation(false)
+    }
+  }
+
+  const handleDeclineInvitation = () => {
+    // Clear the invitation and proceed to create own company
+    setPendingInvitation(null)
     setStep(2)
   }
 
@@ -79,6 +194,20 @@ export default function Onboarding() {
       setLoading(false)
     }
     // Hvis vellykket, vil TenantContext oppdatere tenant og appen vil rute videre automatisk
+  }
+
+  // Show loading while checking for invitations
+  if (checkingInvitation) {
+    return (
+      <div className="onboarding-page">
+        <div className="onboarding-container">
+          <div className="onboarding-header">
+            <Loader2 size={48} className="spinner" style={{ margin: '0 auto' }} />
+            <p style={{ marginTop: '1rem' }}>Laster...</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -133,6 +262,11 @@ export default function Onboarding() {
                     Fullfør
                     <ArrowRight size={18} />
                   </>
+                ) : pendingInvitation ? (
+                  <>
+                    Neste
+                    <ArrowRight size={18} />
+                  </>
                 ) : (
                   <>
                     Neste
@@ -141,6 +275,59 @@ export default function Onboarding() {
                 )}
               </Button>
             </form>
+          </>
+        ) : step === 3 && pendingInvitation ? (
+          <>
+            <div className="onboarding-header">
+              <div className="onboarding-icon invitation-icon">
+                <UserPlus size={48} />
+              </div>
+              <h1>Du er invitert!</h1>
+              <p>Du har blitt invitert til å bli med i <strong>{pendingInvitation.tenant_name}</strong></p>
+            </div>
+
+            <div className="onboarding-form">
+              {error && <div className="alert alert-error">{error}</div>}
+              
+              <div className="invitation-details">
+                <div className="invitation-info">
+                  <span className="label">Bedrift</span>
+                  <span className="value">{pendingInvitation.tenant_name}</span>
+                </div>
+                <div className="invitation-info">
+                  <span className="label">Din rolle</span>
+                  <span className={`value role-badge role-${pendingInvitation.role}`}>
+                    {pendingInvitation.role === 'admin' ? 'Administrator' : 'Medlem'}
+                  </span>
+                </div>
+              </div>
+
+              <Button 
+                onClick={handleAcceptInvitation} 
+                disabled={acceptingInvitation} 
+                className="onboarding-btn"
+              >
+                {acceptingInvitation ? (
+                  <>
+                    <Loader2 size={18} className="spinner" />
+                    Blir med...
+                  </>
+                ) : (
+                  <>
+                    <Check size={18} />
+                    Bli med i {pendingInvitation.tenant_name}
+                  </>
+                )}
+              </Button>
+              
+              <button 
+                type="button" 
+                className="text-btn"
+                onClick={handleDeclineInvitation}
+              >
+                Nei takk, jeg vil opprette min egen bedrift
+              </button>
+            </div>
           </>
         ) : (
           <>

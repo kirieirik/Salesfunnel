@@ -19,6 +19,8 @@ export default function Settings() {
   const [error, setError] = useState('')
   const [members, setMembers] = useState([])
   const [loadingMembers, setLoadingMembers] = useState(false)
+  const [pendingInvites, setPendingInvites] = useState([])
+  const [inviteSuccess, setInviteSuccess] = useState('')
 
   // Profile edit state
   const [firstName, setFirstName] = useState('')
@@ -60,19 +62,29 @@ export default function Settings() {
     }
     
     setLoadingMembers(true)
-    const { data, error } = await supabase
-      .from('tenant_members')
-      .select(`
-        id,
-        role,
-        created_at,
-        user:user_id(id, email)
-      `)
+    
+    // Fetch members
+    const { data: memberData, error } = await supabase
+      .from('profiles')
+      .select('id, email, first_name, last_name, role')
       .eq('tenant_id', tenant.id)
 
     if (!error) {
-      setMembers(data || [])
+      setMembers(memberData || [])
     }
+    
+    // Fetch pending invitations
+    const { data: inviteData } = await supabase
+      .from('invitations')
+      .select('id, email, role, created_at, expires_at')
+      .eq('tenant_id', tenant.id)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+    
+    if (inviteData) {
+      setPendingInvites(inviteData)
+    }
+    
     setLoadingMembers(false)
   }
 
@@ -83,6 +95,7 @@ export default function Settings() {
   const handleInvite = async (e) => {
     e.preventDefault()
     setError('')
+    setInviteSuccess('')
     setLoading(true)
 
     if (isDemoMode) {
@@ -91,47 +104,57 @@ export default function Settings() {
       return
     }
 
-    // For nå - forenklet invitasjon (bruker må allerede eksistere)
-    const { data: invitedUser, error: userError } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('email', inviteEmail)
-      .single()
-
-    if (userError || !invitedUser) {
-      setError('Bruker med denne e-posten finnes ikke')
-      setLoading(false)
-      return
-    }
-
-    const { error: memberError } = await supabase
-      .from('tenant_members')
-      .insert({
-        tenant_id: tenant.id,
-        user_id: invitedUser.id,
-        role: inviteRole
+    try {
+      // Call Edge Function to send invitation
+      const { data, error: inviteError } = await supabase.functions.invoke('send-invite', {
+        body: {
+          email: inviteEmail.toLowerCase().trim(),
+          role: inviteRole
+        }
       })
 
-    if (memberError) {
-      if (memberError.code === '23505') {
-        setError('Brukeren er allerede medlem av organisasjonen')
-      } else {
-        setError(memberError.message)
+      if (inviteError) {
+        throw new Error(inviteError.message || 'Kunne ikke sende invitasjon')
       }
-    } else {
+
+      if (!data?.success) {
+        throw new Error(data?.error || 'Kunne ikke sende invitasjon')
+      }
+
+      setInviteSuccess(`Invitasjon sendt til ${inviteEmail}`)
       setInviteEmail('')
       setShowInvite(false)
+      fetchMembers() // Refresh members and pending invites
+      
+      // Clear success message after 5 seconds
+      setTimeout(() => setInviteSuccess(''), 5000)
+    } catch (err) {
+      setError(err.message || 'Noe gikk galt')
+    }
+    
+    setLoading(false)
+  }
+
+  const handleCancelInvite = async (inviteId) => {
+    if (!confirm('Er du sikker på at du vil avbryte denne invitasjonen?')) return
+
+    const { error } = await supabase
+      .from('invitations')
+      .update({ status: 'cancelled' })
+      .eq('id', inviteId)
+
+    if (!error) {
       fetchMembers()
     }
-    setLoading(false)
   }
 
   const handleRemoveMember = async (memberId) => {
     if (!confirm('Er du sikker på at du vil fjerne dette medlemmet?')) return
 
+    // Remove the user from this tenant by clearing their tenant_id
     const { error } = await supabase
-      .from('org_members')
-      .delete()
+      .from('profiles')
+      .update({ tenant_id: null, role: null })
       .eq('id', memberId)
 
     if (!error) {
@@ -314,28 +337,71 @@ export default function Settings() {
               )}
             </CardHeader>
             <CardContent>
+              {inviteSuccess && (
+                <div className="alert alert-success" style={{ marginBottom: '1rem' }}>
+                  <Check size={16} />
+                  {inviteSuccess}
+                </div>
+              )}
+              
               {loadingMembers ? (
                 <p>Laster medlemmer...</p>
               ) : (
-                <ul className="members-list">
-                  {members.map(member => (
-                    <li key={member.id}>
-                      <div className="member-info">
-                        <span className="email">{member.user?.email || 'Ukjent'}</span>
-                        <span className={`role role-${member.role}`}>{member.role}</span>
-                      </div>
-                      {canManageMembers && member.user?.id !== user.id && (
-                        <button 
-                          className="btn-icon danger"
-                          onClick={() => handleRemoveMember(member.id)}
-                          title="Fjern medlem"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <ul className="members-list">
+                    {members.map(member => (
+                      <li key={member.id}>
+                        <div className="member-info">
+                          <span className="email">
+                            {member.first_name && member.last_name 
+                              ? `${member.first_name} ${member.last_name}` 
+                              : member.email}
+                          </span>
+                          <span className={`role role-${member.role}`}>{member.role}</span>
+                        </div>
+                        {canManageMembers && member.id !== user.id && member.role !== 'owner' && (
+                          <button 
+                            className="btn-icon danger"
+                            onClick={() => handleRemoveMember(member.id)}
+                            title="Fjern medlem"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  
+                  {/* Pending Invitations */}
+                  {pendingInvites.length > 0 && (
+                    <div className="pending-invites">
+                      <h4 style={{ marginTop: '1.5rem', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>
+                        <Mail size={16} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+                        Ventende invitasjoner
+                      </h4>
+                      <ul className="members-list">
+                        {pendingInvites.map(invite => (
+                          <li key={invite.id} className="pending-invite">
+                            <div className="member-info">
+                              <span className="email">{invite.email}</span>
+                              <span className={`role role-${invite.role}`}>{invite.role}</span>
+                              <span className="pending-badge">Venter</span>
+                            </div>
+                            {canManageMembers && (
+                              <button 
+                                className="btn-icon danger"
+                                onClick={() => handleCancelInvite(invite.id)}
+                                title="Avbryt invitasjon"
+                              >
+                                <X size={16} />
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
