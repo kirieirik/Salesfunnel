@@ -37,11 +37,16 @@ serve(async (req) => {
     // Get user's profile with tenant info
     const { data: profile, error: profileError } = await supabaseClient
       .from('profiles')
-      .select('tenant_id, role, first_name, last_name, tenants(name)')
+      .select('tenant_id, role, first_name, last_name, tenant:tenants(name)')
       .eq('id', user.id)
       .single()
 
-    if (profileError || !profile?.tenant_id) {
+    if (profileError) {
+      console.error('Profile error:', profileError)
+      throw new Error('Kunne ikke hente profil')
+    }
+    
+    if (!profile?.tenant_id) {
       throw new Error('Ingen bedrift funnet')
     }
 
@@ -129,7 +134,7 @@ serve(async (req) => {
     }
 
     const inviterName = [profile.first_name, profile.last_name].filter(Boolean).join(' ') || user.email
-    const tenantName = profile.tenants?.name || 'organisasjonen'
+    const tenantName = profile.tenant?.name || 'organisasjonen'
 
     return new Response(
       JSON.stringify({
