@@ -8,10 +8,12 @@ import Layout from './components/layout/Layout'
 // Pages
 import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
+import Onboarding from './pages/auth/Onboarding'
 import Dashboard from './pages/Dashboard'
 import Customers from './pages/Customers'
 import CustomerDetail from './pages/CustomerDetail'
 import Statistics from './pages/Statistics'
+import Budget from './pages/Budget'
 import Settings from './pages/Settings'
 import Calendar from './pages/Calendar'
 import Import from './pages/Import'
@@ -71,6 +73,15 @@ function App() {
               <Register />
             </PublicRoute>
           } />
+          
+          {/* Onboarding route - outside of Layout */}
+          <Route path="/onboarding" element={
+            <ProtectedRoute>
+              <TenantProvider>
+                <Onboarding />
+              </TenantProvider>
+            </ProtectedRoute>
+          } />
 
           {/* Protected routes */}
           <Route path="/" element={
@@ -83,6 +94,7 @@ function App() {
             <Route path="customers" element={<Customers />} />
             <Route path="customers/:id" element={<CustomerDetail />} />
             <Route path="statistics" element={<Statistics />} />
+            <Route path="budget" element={<Budget />} />
             <Route path="import" element={<Import />} />
             <Route path="settings" element={<Settings />} />
           </Route>

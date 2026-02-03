@@ -1,0 +1,197 @@
+/* Budget Page */
+.budget-page {
+  padding: var(--spacing-lg);
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.budget-card {
+  margin-top: var(--spacing-lg);
+}
+
+.budget-table-wrapper {
+  overflow-x: auto;
+}
+
+.budget-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.budget-table thead {
+  background: var(--color-bg-light);
+  border-bottom: 2px solid var(--color-border);
+}
+
+.budget-table th {
+  padding: var(--spacing-md);
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.budget-table th.year-header {
+  color: var(--color-primary);
+}
+
+.budget-table th.budget-header {
+  color: var(--color-warning);
+}
+
+.budget-table th.previous-header {
+  color: var(--color-text-light);
+}
+
+.budget-table th.percentage-header {
+  text-align: center;
+}
+
+.budget-table th.actions-header {
+  width: 100px;
+  text-align: right;
+}
+
+.budget-table tbody tr {
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.budget-table tbody tr:hover {
+  background: var(--color-bg-light);
+}
+
+.budget-table td {
+  padding: var(--spacing-md);
+  vertical-align: middle;
+}
+
+.month-cell {
+  min-width: 100px;
+}
+
+.month-cell strong {
+  color: var(--color-text);
+}
+
+.value-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 140px;
+}
+
+.value-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-height: 24px;
+}
+
+.value-row .label {
+  font-size: 0.75rem;
+  color: var(--color-text-light);
+  min-width: 85px;
+}
+
+.value-row .amount {
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.value-row .amount.profit {
+  color: var(--color-success);
+}
+
+.actual-cell .value-row {
+  border-left: 3px solid var(--color-primary);
+  padding-left: var(--spacing-sm);
+}
+
+.budget-cell .value-row {
+  border-left: 3px solid var(--color-warning);
+  padding-left: var(--spacing-sm);
+}
+
+.previous-cell .value-row {
+  border-left: 3px solid var(--color-border);
+  padding-left: var(--spacing-sm);
+}
+
+.previous-cell .amount {
+  color: var(--color-text-light);
+  font-weight: 500;
+}
+
+.percentage-cell {
+  text-align: center;
+}
+
+.percentage {
+  display: inline-block;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.percentage.good {
+  background: var(--color-success-light, #d1fae5);
+  color: var(--color-success);
+}
+
+.percentage.warning {
+  background: var(--color-warning-light, #fef3c7);
+  color: var(--color-warning);
+}
+
+.edit-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.budget-input {
+  max-width: 150px;
+  font-size: 0.875rem;
+}
+
+.actions-cell {
+  text-align: right;
+}
+
+.action-buttons {
+  display: flex;
+  gap: var(--spacing-xs);
+  justify-content: flex-end;
+}
+
+@media (max-width: 1024px) {
+  .budget-table {
+    font-size: 0.8rem;
+  }
+  
+  .value-group {
+    min-width: 120px;
+  }
+  
+  .value-row .label {
+    min-width: 70px;
+    font-size: 0.7rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .budget-page {
+    padding: var(--spacing-md);
+  }
+  
+  .budget-table-wrapper {
+    overflow-x: scroll;
+  }
+  
+  .budget-table {
+    min-width: 800px;
+  }
+}

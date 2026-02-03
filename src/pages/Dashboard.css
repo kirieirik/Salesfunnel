@@ -155,6 +155,137 @@
   color: var(--color-success);
 }
 
+/* Comparison List */
+.comparison-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 0 var(--spacing-sm) 0;
+  margin-bottom: var(--spacing-sm);
+  border-bottom: 2px solid var(--color-border);
+}
+
+.comparison-month-label {
+  min-width: 40px;
+}
+
+.comparison-year-labels {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.comparison-year-labels .year-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  min-width: 185px;
+  text-align: left;
+}
+
+.comparison-year-labels .year-label.current {
+  color: var(--color-primary);
+}
+
+.comparison-year-labels .year-label.previous {
+  color: var(--color-text-light);
+}
+
+.comparison-list {
+  list-style: none;
+}
+
+.comparison-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md) 0;
+  border-bottom: 1px solid var(--color-border-light);
+  gap: var(--spacing-md);
+}
+
+.comparison-item:last-child {
+  border-bottom: none;
+}
+
+.comparison-item:hover {
+  background: var(--color-bg-light);
+  margin: 0 calc(var(--spacing-md) * -1);
+  padding-left: var(--spacing-md);
+  padding-right: var(--spacing-md);
+  border-radius: var(--radius-sm);
+}
+
+.comparison-month {
+  font-weight: 600;
+  min-width: 40px;
+  flex-shrink: 0;
+  color: var(--color-text);
+}
+
+.comparison-values {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.year-data {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 185px;
+  width: 185px;
+}
+
+.year-data.current-year {
+  border-left: 3px solid var(--color-primary);
+  padding-left: var(--spacing-sm);
+}
+
+.year-data.previous-year {
+  border-left: 3px solid var(--color-border);
+  padding-left: var(--spacing-sm);
+}
+
+.value-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: 0.875rem;
+  min-height: 20px;
+}
+
+.value-label {
+  color: var(--color-text-light);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  min-width: 85px;
+}
+
+.value-amount {
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  text-align: right;
+  flex: 1;
+}
+
+.value-amount.profit {
+  color: var(--color-success);
+}
+
+.previous-year .value-amount {
+  color: var(--color-text-light);
+  font-weight: 500;
+}
+
+.previous-year .value-label {
+  display: none;
+}
+
 /* Year Selector */
 .year-selector {
   display: flex;

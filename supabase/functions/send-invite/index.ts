@@ -19,25 +19,26 @@ serve(async (req) => {
   try {
     console.log('send-invite: Starting...')
     
-    // Get auth token from request
+    // Create Supabase client with service role to bypass RLS for invitations
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
+    
+    // Create client with user's auth to verify user identity
     const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      throw new Error('Ikke autorisert')
-    }
-    console.log('send-invite: Auth header found')
-
-    // Initialize Supabase client with user's token
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
+      { global: { headers: { Authorization: authHeader! } } }
     )
 
-    // Get current user
+    // Get current user - use getUser() which works with both anon key and JWT
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
+    
     if (userError || !user) {
       console.error('send-invite: User error:', userError)
-      throw new Error('Kunne ikke hente bruker')
+      throw new Error('Ikke autorisert')
     }
     console.log('send-invite: User found:', user.id)
 
@@ -122,13 +123,7 @@ serve(async (req) => {
 
     // Get the app URL from environment or use default
     const appUrl = Deno.env.get('APP_URL') || 'https://salesfunnel.vercel.app'
-    const inviteLink = `${appUrl}/register?invite=${invitation.token}`
-
-    // Use Supabase Admin client to send email via Supabase Auth
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
+    const inviteLink = `${appUrl}/onboarding?invite=${invitation.token}`
 
     // Try to invite the user via Supabase Auth (this sends an email)
     const { error: authInviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {

@@ -3,7 +3,8 @@ import {
   LayoutDashboard, 
   Users, 
   Building2, 
-  BarChart3, 
+  BarChart3,
+  TrendingUp,
   Settings,
   CalendarDays,
   FileUp
@@ -18,6 +19,7 @@ export default function Sidebar() {
     { to: '/calendar', icon: CalendarDays, label: 'Kalender' },
     { to: '/customers', icon: Users, label: 'Kunder' },
     { to: '/statistics', icon: BarChart3, label: 'Statistikk' },
+    { to: '/budget', icon: TrendingUp, label: 'Budsjett' },
     { to: '/import', icon: FileUp, label: 'Importer' },
     { to: '/settings', icon: Settings, label: 'Innstillinger' },
   ]

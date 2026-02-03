@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, DollarSign, Activity, ChevronLeft, ChevronRight, Mail, Send } from 'lucide-react'
+import { Users, DollarSign, UserPlus, Mail, Send } from 'lucide-react'
 import { useCustomers } from '../hooks/useCustomers'
 import { useSales } from '../hooks/useSales'
 import { useActivities } from '../hooks/useActivities'
@@ -15,9 +15,6 @@ export default function Dashboard() {
   const { sales, getTotalSales, getSalesByMonth } = useSales()
   const { activities } = useActivities()
 
-  // År-velger state
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
-
   const totalSales = getTotalSales()
   const salesByMonth = getSalesByMonth()
   const recentActivities = activities.slice(0, 5)
@@ -30,17 +27,51 @@ export default function Dashboard() {
       .reduce((sum, sale) => sum + (sale.amount || 0), 0)
   }, [sales, currentYear])
 
-  // Filtrer salg for valgt år
-  const salesByMonthForYear = useMemo(() => {
-    return salesByMonth.filter(({ month }) => month.startsWith(String(selectedYear)))
-  }, [salesByMonth, selectedYear])
+  // Beregn antall nye kunder i inneværende år
+  const newCustomersThisYear = useMemo(() => {
+    return customers.filter(customer => 
+      new Date(customer.created_at).getFullYear() === currentYear
+    ).length
+  }, [customers, currentYear])
 
-  // Finn tilgjengelige år fra salgsdata
-  const availableYears = useMemo(() => {
-    const years = new Set(salesByMonth.map(({ month }) => parseInt(month.split('-')[0])))
-    years.add(new Date().getFullYear()) // Alltid vis inneværende år
-    return Array.from(years).sort((a, b) => b - a)
-  }, [salesByMonth])
+  // Sammenligning år-til-år for alle 12 måneder med både omsetning og fortjeneste
+  const yearComparison = useMemo(() => {
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Des']
+    const previousYear = currentYear - 1
+    
+    // Grupper salg per måned med både amount og profit
+    const salesByMonthWithProfit = {}
+    sales.forEach(sale => {
+      if (!sale.sale_date) return
+      const month = sale.sale_date.substring(0, 7)
+      if (!salesByMonthWithProfit[month]) {
+        salesByMonthWithProfit[month] = { amount: 0, profit: 0 }
+      }
+      salesByMonthWithProfit[month].amount += parseFloat(sale.amount || 0)
+      salesByMonthWithProfit[month].profit += parseFloat(sale.profit || 0)
+    })
+    
+    return monthNames.map((name, index) => {
+      const monthNum = String(index + 1).padStart(2, '0')
+      const currentYearKey = `${currentYear}-${monthNum}`
+      const previousYearKey = `${previousYear}-${monthNum}`
+      
+      const currentYearData = salesByMonthWithProfit[currentYearKey] || { amount: 0, profit: 0 }
+      const previousYearData = salesByMonthWithProfit[previousYearKey] || { amount: 0, profit: 0 }
+      
+      return {
+        month: name,
+        currentYear: {
+          amount: currentYearData.amount,
+          profit: currentYearData.profit
+        },
+        previousYear: {
+          amount: previousYearData.amount,
+          profit: previousYearData.profit
+        }
+      }
+    })
+  }, [sales, currentYear])
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('nb-NO', {
@@ -96,11 +127,11 @@ export default function Dashboard() {
         <Card className="stat-card">
           <CardContent>
             <div className="stat-icon">
-              <Activity size={24} />
+              <UserPlus size={24} />
             </div>
             <div className="stat-info">
-              <span className="stat-value">{activities.length}</span>
-              <span className="stat-label">Aktiviteter</span>
+              <span className="stat-value">{newCustomersThisYear}</span>
+              <span className="stat-label">Nye kunder i {currentYear}</span>
             </div>
           </CardContent>
         </Card>
@@ -149,46 +180,46 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Sales by Month */}
+        {/* Year-over-Year Comparison */}
         <Card>
           <CardHeader>
-            <h3>Salg per måned</h3>
-            <div className="year-selector">
-              <button 
-                className="year-nav-btn"
-                onClick={() => setSelectedYear(prev => prev - 1)}
-                disabled={!availableYears.includes(selectedYear - 1) && selectedYear <= Math.min(...availableYears)}
-              >
-                <ChevronLeft size={18} />
-              </button>
-              <span className="year-label">{selectedYear}</span>
-              <button 
-                className="year-nav-btn"
-                onClick={() => setSelectedYear(prev => prev + 1)}
-                disabled={selectedYear >= new Date().getFullYear()}
-              >
-                <ChevronRight size={18} />
-              </button>
-            </div>
+            <h3>Sammenligning år-til-år</h3>
           </CardHeader>
           <CardContent>
-            {salesByMonthForYear.length === 0 ? (
-              <p className="empty-text">Ingen salgsdata for {selectedYear}</p>
-            ) : (
-              <ul className="sales-list">
-                {salesByMonthForYear.slice(-6).reverse().map(({ month, total }) => {
-                  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Des']
-                  const monthIndex = parseInt(month.split('-')[1]) - 1
-                  const monthName = monthNames[monthIndex]
-                  return (
-                    <li key={month} className="sales-item">
-                      <span>{monthName}</span>
-                      <span className="sales-amount">{formatCurrency(total)}</span>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
+            <div className="comparison-header">
+              <span className="comparison-month-label"></span>
+              <div className="comparison-year-labels">
+                <span className="year-label current">{currentYear}</span>
+                <span className="year-label previous">{currentYear - 1}</span>
+              </div>
+            </div>
+            <ul className="comparison-list">
+              {yearComparison.map(({ month, currentYear: current, previousYear: previous }) => (
+                <li key={month} className="comparison-item">
+                  <span className="comparison-month">{month}</span>
+                  <div className="comparison-values">
+                    <div className="year-data current-year">
+                      <div className="value-row">
+                        <span className="value-label">Omsetning:</span>
+                        <span className="value-amount">{formatCurrency(current.amount)}</span>
+                      </div>
+                      <div className="value-row">
+                        <span className="value-label">Fortjeneste:</span>
+                        <span className="value-amount profit">{formatCurrency(current.profit)}</span>
+                      </div>
+                    </div>
+                    <div className="year-data previous-year">
+                      <div className="value-row">
+                        <span className="value-amount">{formatCurrency(previous.amount)}</span>
+                      </div>
+                      <div className="value-row">
+                        <span className="value-amount profit">{formatCurrency(previous.profit)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
       </div>

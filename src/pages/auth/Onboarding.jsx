@@ -41,9 +41,12 @@ export default function Onboarding() {
         return
       }
       
+      console.log('Onboarding: Checking for invitation, token:', inviteToken, 'email:', user.email)
+      
       try {
         // First check URL token, then check for any pending invitation
         if (inviteToken) {
+          console.log('Onboarding: Looking for invitation by token:', inviteToken)
           const { data: invite } = await supabase
             .from('invitations')
             .select('*, tenants(name)')
@@ -51,13 +54,17 @@ export default function Onboarding() {
             .eq('status', 'pending')
             .single()
           
+          console.log('Onboarding: Invitation by token result:', invite)
+          
           if (invite && new Date(invite.expires_at) > new Date()) {
             setPendingInvitation({
               ...invite,
               tenant_name: invite.tenants?.name
             })
+            console.log('Onboarding: Found valid invitation by token')
           }
         } else {
+          console.log('Onboarding: No token, checking by email:', user.email)
           // Check if user has any pending invitation by email
           const { data: invite } = await supabase
             .from('invitations')
@@ -69,14 +76,18 @@ export default function Onboarding() {
             .limit(1)
             .single()
           
+          console.log('Onboarding: Invitation by email result:', invite)
+          
           if (invite) {
             setPendingInvitation({
               ...invite,
               tenant_name: invite.tenants?.name
             })
+            console.log('Onboarding: Found valid invitation by email')
           }
         }
       } catch (err) {
+        console.log('Onboarding: No invitation found:', err.message)
         // No invitation found, continue with normal flow
       }
       

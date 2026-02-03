@@ -35,9 +35,10 @@ export function useSales(customerId = null) {
         .select(`
           *,
           customer:customers(id, name)
-        `)
+        `, { count: 'exact' })
         .eq('tenant_id', tenant.id)
         .order('sale_date', { ascending: false })
+        .limit(50000)
 
       if (customerId) {
         query = query.eq('customer_id', customerId)
@@ -153,6 +154,7 @@ export function useSales(customerId = null) {
   const getSalesByMonth = useCallback(() => {
     const byMonth = {}
     sales.forEach(sale => {
+      if (!sale.sale_date) return
       const month = sale.sale_date.substring(0, 7) // YYYY-MM
       byMonth[month] = (byMonth[month] || 0) + parseFloat(sale.amount)
     })
