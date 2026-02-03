@@ -153,6 +153,38 @@ export default function Budget() {
     })
   }, [sales, budgets, currentYear])
 
+  // Beregn totale prognoser for året
+  const yearSummary = useMemo(() => {
+    let totalBudgetSales = 0
+    let totalBudgetProfit = 0
+    let totalPreviousYearSales = 0
+    let totalPreviousYearProfit = 0
+
+    yearComparison.forEach(month => {
+      totalBudgetSales += month.budget.sales
+      totalBudgetProfit += month.budget.profit
+      totalPreviousYearSales += month.previousYear.amount
+      totalPreviousYearProfit += month.previousYear.profit
+    })
+
+    const salesGrowth = totalPreviousYearSales > 0 
+      ? ((totalBudgetSales - totalPreviousYearSales) / totalPreviousYearSales) * 100 
+      : 0
+
+    const profitGrowth = totalPreviousYearProfit > 0 
+      ? ((totalBudgetProfit - totalPreviousYearProfit) / totalPreviousYearProfit) * 100 
+      : 0
+
+    return {
+      budgetSales: totalBudgetSales,
+      budgetProfit: totalBudgetProfit,
+      previousYearSales: totalPreviousYearSales,
+      previousYearProfit: totalPreviousYearProfit,
+      salesGrowth,
+      profitGrowth
+    }
+  }, [yearComparison])
+
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('nb-NO', {
       style: 'currency',
@@ -164,7 +196,12 @@ export default function Budget() {
 
   const calculatePercentage = (actual, budget) => {
     if (!budget || budget === 0) return null
-    return ((actual / budget) * 100).toFixed(0)
+    const difference = actual - budget
+    const percentage = (difference / budget) * 100
+    return {
+      value: Math.abs(percentage).toFixed(0),
+      isPositive: difference >= 0
+    }
   }
 
   if (!tenant) {
@@ -185,6 +222,41 @@ export default function Budget() {
           <p>Sammenlign faktiske tall mot budsjett og fjoråret</p>
         </div>
       </div>
+
+      {/* Prognose for året */}
+      {yearSummary.budgetSales > 0 && (
+        <Card className="forecast-card">
+          <CardHeader>
+            <h3>Prognose {currentYear}</h3>
+          </CardHeader>
+          <CardContent>
+            <div className="forecast-grid">
+              <div className="forecast-item">
+                <span className="forecast-label">Budsjettert omsetning</span>
+                <span className="forecast-value primary">{formatCurrency(yearSummary.budgetSales)}</span>
+                <span className={`forecast-growth ${yearSummary.salesGrowth >= 0 ? 'positive' : 'negative'}`}>
+                  {yearSummary.salesGrowth >= 0 ? '+' : ''}{yearSummary.salesGrowth.toFixed(1)}% fra {currentYear - 1}
+                </span>
+              </div>
+              <div className="forecast-item">
+                <span className="forecast-label">Budsjettert fortjeneste</span>
+                <span className="forecast-value success">{formatCurrency(yearSummary.budgetProfit)}</span>
+                <span className={`forecast-growth ${yearSummary.profitGrowth >= 0 ? 'positive' : 'negative'}`}>
+                  {yearSummary.profitGrowth >= 0 ? '+' : ''}{yearSummary.profitGrowth.toFixed(1)}% fra {currentYear - 1}
+                </span>
+              </div>
+              <div className="forecast-item">
+                <span className="forecast-label">Faktisk {currentYear - 1} omsetning</span>
+                <span className="forecast-value">{formatCurrency(yearSummary.previousYearSales)}</span>
+              </div>
+              <div className="forecast-item">
+                <span className="forecast-label">Faktisk {currentYear - 1} fortjeneste</span>
+                <span className="forecast-value">{formatCurrency(yearSummary.previousYearProfit)}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="budget-card">
         <CardHeader>
@@ -265,15 +337,15 @@ export default function Budget() {
                         <div className="value-group">
                           <div className="value-row">
                             {salesPercentage && (
-                              <span className={`percentage ${parseFloat(salesPercentage) >= 100 ? 'good' : 'warning'}`}>
-                                {salesPercentage}%
+                              <span className={`percentage ${salesPercentage.isPositive ? 'good' : 'warning'}`}>
+                                {salesPercentage.isPositive ? '+' : '-'}{salesPercentage.value}%
                               </span>
                             )}
                           </div>
                           <div className="value-row">
                             {profitPercentage && (
-                              <span className={`percentage ${parseFloat(profitPercentage) >= 100 ? 'good' : 'warning'}`}>
-                                {profitPercentage}%
+                              <span className={`percentage ${profitPercentage.isPositive ? 'good' : 'warning'}`}>
+                                {profitPercentage.isPositive ? '+' : '-'}{profitPercentage.value}%
                               </span>
                             )}
                           </div>
