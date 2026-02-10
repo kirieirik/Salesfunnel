@@ -24,6 +24,8 @@ export default function Onboarding() {
   const [firstName, setFirstName] = useState(profile?.first_name || '')
   const [lastName, setLastName] = useState(profile?.last_name || '')
   const [phone, setPhone] = useState(profile?.phone || '')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [companyName, setCompanyName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -41,61 +43,33 @@ export default function Onboarding() {
         return
       }
       
-      console.log('Onboarding: Checking for invitation, token:', inviteToken, 'email:', user.email)
+      console.log('Onboarding: Checking for invitation via RPC, email:', user.email)
       
       try {
-        // First check URL token, then check for any pending invitation
-        if (inviteToken) {
-          console.log('Onboarding: Looking for invitation by token:', inviteToken)
-          const { data: invite } = await supabase
-            .from('invitations')
-            .select('*, tenants(name)')
-            .eq('token', inviteToken)
-            .eq('status', 'pending')
-            .single()
-          
-          console.log('Onboarding: Invitation by token result:', invite)
-          
-          if (invite && new Date(invite.expires_at) > new Date()) {
-            setPendingInvitation({
-              ...invite,
-              tenant_name: invite.tenants?.name
-            })
-            console.log('Onboarding: Found valid invitation by token')
-          }
-        } else {
-          console.log('Onboarding: No token, checking by email:', user.email)
-          // Check if user has any pending invitation by email
-          const { data: invite } = await supabase
-            .from('invitations')
-            .select('*, tenants(name)')
-            .eq('email', user.email.toLowerCase())
-            .eq('status', 'pending')
-            .gt('expires_at', new Date().toISOString())
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single()
-          
-          console.log('Onboarding: Invitation by email result:', invite)
-          
-          if (invite) {
-            setPendingInvitation({
-              ...invite,
-              tenant_name: invite.tenants?.name
-            })
-            console.log('Onboarding: Found valid invitation by email')
-          }
+        // Use SECURITY DEFINER RPC function that bypasses RLS
+        const { data: inviteResult, error: rpcError } = await supabase
+          .rpc('check_pending_invitation', { user_email: user.email.toLowerCase() })
+        
+        console.log('Onboarding: check_pending_invitation result:', inviteResult, 'error:', rpcError)
+        
+        if (!rpcError && inviteResult?.has_invitation) {
+          setPendingInvitation({
+            id: inviteResult.invitation_id,
+            token: inviteResult.token,
+            tenant_name: inviteResult.tenant_name,
+            role: inviteResult.role
+          })
+          console.log('Onboarding: Found valid invitation for', inviteResult.tenant_name)
         }
       } catch (err) {
-        console.log('Onboarding: No invitation found:', err.message)
-        // No invitation found, continue with normal flow
+        console.log('Onboarding: Error checking invitation:', err.message)
       }
       
       setCheckingInvitation(false)
     }
     
     checkInvitation()
-  }, [user?.email, inviteToken])
+  }, [user?.email])
 
   // Hvis profil allerede er komplett, hopp til steg 2
   useEffect(() => {
@@ -110,6 +84,18 @@ export default function Onboarding() {
     if (!firstName.trim() || !lastName.trim()) {
       setError('Vennligst fyll inn fornavn og etternavn')
       return
+    }
+
+    // Validate password for invited users
+    if (pendingInvitation && password) {
+      if (password.length < 6) {
+        setError('Passordet m\u00e5 v\u00e6re minst 6 tegn')
+        return
+      }
+      if (password !== confirmPassword) {
+        setError('Passordene er ikke like')
+        return
+      }
     }
 
     setLoading(true)
@@ -151,32 +137,36 @@ export default function Onboarding() {
     setError('')
     
     try {
-      // Update profile with tenant and role from invitation
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({
-          tenant_id: pendingInvitation.tenant_id,
-          role: pendingInvitation.role
-        })
-        .eq('id', user.id)
+      // Set password if provided (for users invited via magic link who don't have one yet)
+      if (password) {
+        const { error: pwError } = await supabase.auth.updateUser({ password })
+        if (pwError) {
+          console.warn('Kunne ikke sette passord:', pwError.message)
+          // Don't block acceptance - password can be set later
+        }
+      }
       
-      if (updateError) throw updateError
+      // Use SECURITY DEFINER RPC function to accept invitation
+      // This handles: setting tenant_id + role on profile, marking invitation as accepted
+      const { data: result, error: rpcError } = await supabase
+        .rpc('accept_invitation', { invitation_token: pendingInvitation.token })
       
-      // Mark invitation as accepted
-      await supabase
-        .from('invitations')
-        .update({ 
-          status: 'accepted',
-          accepted_at: new Date().toISOString()
-        })
-        .eq('id', pendingInvitation.id)
+      console.log('accept_invitation result:', result, 'error:', rpcError)
+      
+      if (rpcError) {
+        throw new Error(rpcError.message || 'Database-feil ved akseptering')
+      }
+      
+      if (!result?.success) {
+        throw new Error(result?.error || 'Kunne ikke akseptere invitasjonen')
+      }
       
       // Refresh tenant context to pick up the new tenant
       await refreshTenant()
       
       // The app should now redirect automatically
     } catch (err) {
-      setError('Kunne ikke akseptere invitasjonen. Prøv igjen.')
+      setError(err.message || 'Kunne ikke akseptere invitasjonen. Prøv igjen.')
       setAcceptingInvitation(false)
     }
   }
@@ -261,6 +251,32 @@ export default function Onboarding() {
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="+47 XXX XX XXX"
               />
+
+              {/* Password fields for invited users (they may not have a password yet) */}
+              {pendingInvitation && (
+                <>
+                  <div className="onboarding-divider">
+                    <span>Velg passord</span>
+                  </div>
+                  <Input
+                    label="Passord *"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Minst 6 tegn"
+                    autoComplete="new-password"
+                    minLength={6}
+                  />
+                  <Input
+                    label="Bekreft passord *"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Gjenta passordet"
+                    autoComplete="new-password"
+                  />
+                </>
+              )}
 
               <Button type="submit" disabled={loading} className="onboarding-btn">
                 {loading ? (

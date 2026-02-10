@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Building2, Users, Plus, Trash2, UserPlus, User, Save, Loader2, Mail, Check, X, RefreshCw } from 'lucide-react'
+import { Building2, Users, Plus, Trash2, UserPlus, User, Save, Loader2, Mail, Check, X, RefreshCw, Copy, Link } from 'lucide-react'
 import { supabase, isDemoMode } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useTenant } from '../contexts/TenantContext'
@@ -21,6 +21,8 @@ export default function Settings() {
   const [loadingMembers, setLoadingMembers] = useState(false)
   const [pendingInvites, setPendingInvites] = useState([])
   const [inviteSuccess, setInviteSuccess] = useState('')
+  const [inviteLink, setInviteLink] = useState('')
+  const [linkCopied, setLinkCopied] = useState(false)
 
   // Profile edit state
   const [firstName, setFirstName] = useState('')
@@ -92,10 +94,18 @@ export default function Settings() {
     fetchMembers()
   }, [tenant])
 
+  const copyInviteLink = () => {
+    navigator.clipboard.writeText(inviteLink)
+    setLinkCopied(true)
+    setTimeout(() => setLinkCopied(false), 2000)
+  }
+
   const handleInvite = async (e) => {
     e.preventDefault()
     setError('')
     setInviteSuccess('')
+    setInviteLink('')
+    setLinkCopied(false)
     setLoading(true)
 
     if (isDemoMode) {
@@ -105,33 +115,62 @@ export default function Settings() {
     }
 
     try {
-      // Call Edge Function to send invitation
-      const { data, error: inviteError } = await supabase.functions.invoke('send-invite', {
-        body: {
-          email: inviteEmail.toLowerCase().trim(),
-          role: inviteRole
+      const trimmedEmail = inviteEmail.toLowerCase().trim()
+
+      // Create invitation directly in the database (RLS allows for owners/admins)
+      const { data: invitation, error: insertError } = await supabase
+        .from('invitations')
+        .insert({
+          tenant_id: tenant.id,
+          email: trimmedEmail,
+          role: inviteRole,
+          invited_by: user.id
+        })
+        .select()
+        .single()
+
+      if (insertError) {
+        if (insertError.code === '23505' || insertError.message?.includes('unique')) {
+          throw new Error('Det finnes allerede en ventende invitasjon til denne e-posten')
         }
-      })
-
-      if (inviteError) {
-        throw new Error(inviteError.message || 'Kunne ikke sende invitasjon')
+        throw new Error(insertError.message || 'Kunne ikke opprette invitasjon')
       }
 
-      if (!data?.success) {
-        throw new Error(data?.error || 'Kunne ikke sende invitasjon')
+      // Build invite link for manual sharing
+      const appUrl = window.location.origin
+      const link = `${appUrl}/register?invite=${invitation.token}`
+      setInviteLink(link)
+
+      // Try to send email via Edge Function (best effort - don't block on failure)
+      let emailSent = false
+      try {
+        const { data: fnData, error: fnError } = await supabase.functions.invoke('send-invite', {
+          body: {
+            invitationId: invitation.id,
+            email: trimmedEmail,
+            inviteLink: `${appUrl}/onboarding?invite=${invitation.token}`,
+            tenantName: tenant.name,
+            inviterName: [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || user.email
+          }
+        })
+        emailSent = !fnError && fnData?.success
+      } catch (emailErr) {
+        console.warn('Edge Function feilet (invitasjon er likevel opprettet):', emailErr)
       }
 
-      setInviteSuccess(`Invitasjon sendt til ${inviteEmail}`)
+      if (emailSent) {
+        setInviteSuccess(`Invitasjon sendt på e-post til ${trimmedEmail}!`)
+      } else {
+        setInviteSuccess(`Invitasjon opprettet! Del lenken nedenfor med ${trimmedEmail}.`)
+      }
+
       setInviteEmail('')
       setShowInvite(false)
-      fetchMembers() // Refresh members and pending invites
-      
-      // Clear success message after 5 seconds
-      setTimeout(() => setInviteSuccess(''), 5000)
+      fetchMembers()
     } catch (err) {
       setError(err.message || 'Noe gikk galt')
     }
-    
+
     setLoading(false)
   }
 
@@ -345,6 +384,23 @@ export default function Settings() {
                 <div className="alert alert-success" style={{ marginBottom: '1rem' }}>
                   <Check size={16} />
                   {inviteSuccess}
+                </div>
+              )}
+
+              {inviteLink && (
+                <div className="invite-link-section">
+                  <div className="invite-link-header">
+                    <Link size={16} />
+                    <span>Invitasjonslenke</span>
+                  </div>
+                  <div className="invite-link-box">
+                    <code className="invite-link-url">{inviteLink}</code>
+                    <Button size="sm" variant="secondary" onClick={copyInviteLink}>
+                      <Copy size={14} />
+                      {linkCopied ? 'Kopiert!' : 'Kopier'}
+                    </Button>
+                  </div>
+                  <p className="invite-link-hint">Personen kan bruke denne lenken for å registrere seg og bli med i {tenant?.name}.</p>
                 </div>
               )}
               

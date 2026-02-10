@@ -1,5 +1,9 @@
 // Supabase Edge Function: Send Invitation Email
-// Deploy: supabase functions deploy send-invite
+// Deploy: supabase functions deploy send-invite --no-verify-jwt
+//
+// This function only handles sending the auth invite email.
+// The invitation record is created by the frontend (protected by RLS).
+// Deploy with --no-verify-jwt since we validate the invitation via service role.
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -17,143 +21,61 @@ serve(async (req) => {
   }
 
   try {
-    console.log('send-invite: Starting...')
-    
-    // Create Supabase client with service role to bypass RLS for invitations
+    // Create Supabase admin client (service role) for auth invite
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
-    
-    // Create client with user's auth to verify user identity
-    const authHeader = req.headers.get('Authorization')
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader! } } }
-    )
-
-    // Get current user - use getUser() which works with both anon key and JWT
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
-    
-    if (userError || !user) {
-      console.error('send-invite: User error:', userError)
-      throw new Error('Ikke autorisert')
-    }
-    console.log('send-invite: User found:', user.id)
-
-    // Get user's profile with tenant info
-    const { data: profile, error: profileError } = await supabaseClient
-      .from('profiles')
-      .select('tenant_id, role, first_name, last_name, tenant:tenants(name)')
-      .eq('id', user.id)
-      .single()
-
-    console.log('send-invite: Profile result:', { profile, profileError })
-
-    if (profileError) {
-      console.error('Profile error:', profileError)
-      throw new Error('Kunne ikke hente profil: ' + profileError.message)
-    }
-    
-    if (!profile?.tenant_id) {
-      throw new Error('Ingen bedrift funnet')
-    }
-
-    // Check if user has permission to invite
-    if (!['owner', 'admin'].includes(profile.role)) {
-      throw new Error('Du har ikke tilgang til å invitere brukere')
-    }
-    console.log('send-invite: User role OK:', profile.role)
 
     // Parse request body
     const body = await req.json()
-    const { email, role } = body
-    console.log('send-invite: Request body:', { email, role })
+    const { invitationId, email, inviteLink, tenantName, inviterName } = body
+    console.log('send-invite: Request body:', { invitationId, email, tenantName })
 
-    if (!email || !email.includes('@')) {
-      throw new Error('Ugyldig e-postadresse')
+    if (!email || !invitationId) {
+      throw new Error('Mangler påkrevde felt (email, invitationId)')
     }
 
-    if (!['admin', 'member'].includes(role)) {
-      throw new Error('Ugyldig rolle')
-    }
-
-    // Check if user is already a member
-    const { data: existingMember } = await supabaseClient
-      .from('profiles')
-      .select('id')
-      .eq('tenant_id', profile.tenant_id)
-      .eq('email', email)
-      .single()
-
-    if (existingMember) {
-      throw new Error('Denne brukeren er allerede medlem av organisasjonen')
-    }
-
-    // Check if there's already a pending invitation
-    const { data: existingInvite } = await supabaseClient
+    // Verify invitation exists using service role (bypasses RLS)
+    const { data: invitation, error: invError } = await supabaseAdmin
       .from('invitations')
-      .select('id')
-      .eq('tenant_id', profile.tenant_id)
+      .select('id, email, tenant_id, token, status')
+      .eq('id', invitationId)
       .eq('email', email.toLowerCase())
       .eq('status', 'pending')
       .single()
 
-    if (existingInvite) {
-      throw new Error('Det finnes allerede en ventende invitasjon til denne e-posten')
+    if (invError || !invitation) {
+      console.error('send-invite: Invitation not found:', invError)
+      throw new Error('Invitasjon ikke funnet')
     }
+    console.log('send-invite: Invitation verified:', invitation.id)
 
-    // Create the invitation
-    const { data: invitation, error: inviteError } = await supabaseClient
-      .from('invitations')
-      .insert({
-        tenant_id: profile.tenant_id,
-        email: email.toLowerCase(),
-        role: role,
-        invited_by: user.id
-      })
-      .select()
-      .single()
-
-    if (inviteError) {
-      console.error('Invite error:', inviteError)
-      throw new Error('Kunne ikke opprette invitasjon')
-    }
-
-    // Get the app URL from environment or use default
-    const appUrl = Deno.env.get('APP_URL') || 'https://salesfunnel.vercel.app'
-    const inviteLink = `${appUrl}/onboarding?invite=${invitation.token}`
-
-    // Try to invite the user via Supabase Auth (this sends an email)
-    const { error: authInviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: inviteLink,
+    // Try to invite user via Supabase Auth (sends magic link email)
+    const { error: authError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+      redirectTo: inviteLink || undefined,
       data: {
         invitation_token: invitation.token,
-        tenant_id: profile.tenant_id,
-        role: role
+        tenant_id: invitation.tenant_id
       }
     })
 
-    // If user already exists in auth, we'll still create the invitation
-    // They'll see it when they log in
-    if (authInviteError && !authInviteError.message.includes('already been registered')) {
-      console.warn('Auth invite warning:', authInviteError.message)
+    if (authError) {
+      // If user already has an account, that's OK - they can log in normally
+      if (authError.message?.includes('already been registered')) {
+        console.log('send-invite: User already exists, invitation still valid')
+      } else {
+        console.warn('send-invite: Auth invite error:', authError.message)
+        // Don't throw - the invitation record exists, user can use the link
+      }
+    } else {
+      console.log('send-invite: Auth invite email sent successfully')
     }
-
-    const inviterName = [profile.first_name, profile.last_name].filter(Boolean).join(' ') || user.email
-    const tenantName = profile.tenant?.name || 'organisasjonen'
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Invitasjon sendt til ${email}`,
-        invitation: {
-          id: invitation.id,
-          email: invitation.email,
-          role: invitation.role,
-          expires_at: invitation.expires_at
-        }
+        message: `Invitasjon sendt til ${email}`
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -162,7 +84,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Error:', error)
+    console.error('send-invite: Error:', error)
     return new Response(
       JSON.stringify({
         success: false,

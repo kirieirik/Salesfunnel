@@ -33,24 +33,17 @@ export default function Layout() {
       // Sjekk om bruker mangler tenant
       const needsTenant = !tenant
       
-      // Sjekk om bruker har pending invitasjon
+      // Sjekk om bruker har pending invitasjon via RPC (bypasses RLS)
       let hasPendingInvite = false
       if (user?.email && !tenant) {
         try {
-          const { data: invite } = await supabase
-            .from('invitations')
-            .select('id')
-            .eq('email', user.email.toLowerCase())
-            .eq('status', 'pending')
-            .gt('expires_at', new Date().toISOString())
-            .limit(1)
-            .single()
+          const { data: inviteResult } = await supabase
+            .rpc('check_pending_invitation', { user_email: user.email.toLowerCase() })
           
-          hasPendingInvite = !!invite
-          console.log('Layout: Found pending invite:', invite?.id)
+          hasPendingInvite = inviteResult?.has_invitation === true
+          console.log('Layout: Pending invite check via RPC:', inviteResult)
         } catch (err) {
-          console.log('Layout: No pending invite found')
-          // Ingen invitasjon funnet
+          console.log('Layout: Error checking pending invite:', err)
         }
       }
 
