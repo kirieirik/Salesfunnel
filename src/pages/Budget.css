@@ -221,6 +221,191 @@
   justify-content: flex-end;
 }
 
+/* Default percent section */
+.default-percent-card {
+  margin-top: var(--spacing-lg);
+}
+
+.default-percent-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+  flex-wrap: wrap;
+}
+
+.default-percent-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  color: var(--color-text);
+}
+
+.default-percent-info > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.default-percent-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.default-percent-desc {
+  font-size: 0.8rem;
+  color: var(--color-text-light);
+}
+
+.default-percent-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.default-percent-input {
+  max-width: 100px;
+  text-align: right;
+}
+
+.percent-symbol {
+  font-weight: 600;
+  color: var(--color-text-light);
+  font-size: 0.95rem;
+}
+
+.percent-input-group {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.percent-input-group .budget-input {
+  max-width: 120px;
+}
+
+.calculated-profit {
+  font-size: 0.8rem;
+  color: var(--color-success);
+  font-weight: 500;
+  padding-left: var(--spacing-xs);
+}
+
+/* Mobile card view - hidden on desktop */
+.budget-mobile {
+  display: none;
+  margin-top: var(--spacing-lg);
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.budget-mobile-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: var(--spacing-xs);
+}
+
+.budget-month-card {
+  border-left: 4px solid var(--color-primary);
+}
+
+.month-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+}
+
+.month-card-header h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.month-card-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.month-card-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.month-card-section-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  width: fit-content;
+}
+
+.month-card-section-title.actual-tag {
+  background: var(--color-primary-light, #dbeafe);
+  color: var(--color-primary);
+}
+
+.month-card-section-title.budget-tag {
+  background: var(--color-warning-light, #fef3c7);
+  color: var(--color-warning);
+}
+
+.month-card-section-title.previous-tag {
+  background: var(--color-bg-light);
+  color: var(--color-text-light);
+}
+
+.month-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) 0;
+}
+
+.month-card-label {
+  font-size: 0.8rem;
+  color: var(--color-text-light);
+  min-width: 80px;
+}
+
+.month-card-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text);
+  flex: 1;
+  text-align: right;
+}
+
+.month-card-value.profit {
+  color: var(--color-success);
+}
+
+.month-card-value.muted {
+  color: var(--color-text-light);
+  font-weight: 500;
+}
+
+.month-card-value.muted.profit {
+  color: var(--color-text-light);
+}
+
+.month-card-edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.budget-input-mobile {
+  font-size: 0.875rem;
+  width: 100%;
+}
+
 @media (max-width: 1024px) {
   .budget-table {
     font-size: 0.8rem;
@@ -240,12 +425,39 @@
   .budget-page {
     padding: var(--spacing-md);
   }
-  
-  .budget-table-wrapper {
-    overflow-x: scroll;
+
+  .default-percent-section {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .default-percent-controls {
+    width: 100%;
+  }
+
+  .default-percent-controls .default-percent-input {
+    flex: 1;
   }
   
-  .budget-table {
-    min-width: 800px;
+  /* Hide desktop table, show mobile cards */
+  .budget-desktop {
+    display: none;
+  }
+  
+  .budget-mobile {
+    display: flex;
+  }
+
+  .forecast-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-md);
+  }
+
+  .forecast-value {
+    font-size: 1.15rem;
+  }
+
+  .forecast-label {
+    font-size: 0.75rem;
   }
 }

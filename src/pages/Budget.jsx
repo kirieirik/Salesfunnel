@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { TrendingUp, Edit2, Save, X, Plus } from 'lucide-react'
+import { TrendingUp, Edit2, Save, X, Plus, Percent } from 'lucide-react'
 import { useCustomers } from '../hooks/useCustomers'
 import { useSales } from '../hooks/useSales'
 import { useTenant } from '../contexts/TenantContext'
@@ -12,9 +12,11 @@ export default function Budget() {
   const { tenant } = useTenant()
   const { sales } = useSales()
   const currentYear = new Date().getFullYear()
-  const [budgets, setBudgets] = useState({}) // { '2026-01': { sales: 1000000, profit: 200000 }, ... }
+  const [budgets, setBudgets] = useState({})
+  const [defaultProfitPercent, setDefaultProfitPercent] = useState('')
+  const [defaultPercentInput, setDefaultPercentInput] = useState('')
   const [editingMonth, setEditingMonth] = useState(null)
-  const [editValues, setEditValues] = useState({ sales: '', profit: '' })
+  const [editValues, setEditValues] = useState({ sales: '', profitPercent: '' })
   const [loading, setLoading] = useState(true)
 
   // Hent budsjett fra database
@@ -25,9 +27,19 @@ export default function Budget() {
 
   const fetchBudgets = async () => {
     if (isDemoMode) {
-      // Demo-data
       const demoBudgets = JSON.parse(localStorage.getItem('demo_budgets') || '{}')
+      // Migrer gammel absolutt fortjeneste til prosent i demo-data
+      Object.entries(demoBudgets).forEach(([key, val]) => {
+        if (key !== 'default' && val.profit && !val.profitPercent && val.sales > 0) {
+          val.profitPercent = Math.round((val.profit / val.sales) * 100 * 10) / 10
+          delete val.profit
+        }
+      })
       setBudgets(demoBudgets)
+      if (demoBudgets['default']?.profitPercent) {
+        setDefaultProfitPercent(demoBudgets['default'].profitPercent)
+        setDefaultPercentInput(String(demoBudgets['default'].profitPercent))
+      }
       setLoading(false)
       return
     }
@@ -41,13 +53,29 @@ export default function Budget() {
       if (error) throw error
 
       const budgetMap = {}
+      let defaultPercent = ''
       data?.forEach(b => {
-        budgetMap[b.month] = {
-          sales: parseFloat(b.sales_budget || 0),
-          profit: parseFloat(b.profit_budget || 0)
+        if (b.month === 'default') {
+          defaultPercent = parseFloat(b.profit_budget || 0)
+          budgetMap['default'] = { profitPercent: defaultPercent }
+        } else {
+          const salesVal = parseFloat(b.sales_budget || 0)
+          let profitVal = parseFloat(b.profit_budget || 0)
+          // Migrer gammel absolutt fortjeneste til prosent
+          if (profitVal > 100 && salesVal > 0) {
+            profitVal = Math.round((profitVal / salesVal) * 100 * 10) / 10
+          }
+          budgetMap[b.month] = {
+            sales: salesVal,
+            profitPercent: profitVal
+          }
         }
       })
       setBudgets(budgetMap)
+      if (defaultPercent !== '') {
+        setDefaultProfitPercent(defaultPercent)
+        setDefaultPercentInput(String(defaultPercent))
+      }
     } catch (err) {
       console.error('Feil ved lasting av budsjett:', err)
     } finally {
@@ -55,11 +83,14 @@ export default function Budget() {
     }
   }
 
-  const saveBudget = async (month, salesBudget, profitBudget) => {
+  const saveBudget = async (month, salesBudget, profitPercent) => {
+    const parsedSales = parseFloat(salesBudget) || 0
+    const parsedPercent = parseFloat(profitPercent) || 0
+
     if (isDemoMode) {
       const updated = {
         ...budgets,
-        [month]: { sales: parseFloat(salesBudget), profit: parseFloat(profitBudget) }
+        [month]: { sales: parsedSales, profitPercent: parsedPercent }
       }
       setBudgets(updated)
       localStorage.setItem('demo_budgets', JSON.stringify(updated))
@@ -72,40 +103,96 @@ export default function Budget() {
         .upsert({
           tenant_id: tenant.id,
           month: month,
-          sales_budget: parseFloat(salesBudget),
-          profit_budget: parseFloat(profitBudget)
+          sales_budget: parsedSales,
+          profit_budget: parsedPercent
         }, {
           onConflict: 'tenant_id,month'
         })
 
       if (error) throw error
 
-      setBudgets({
-        ...budgets,
-        [month]: { sales: parseFloat(salesBudget), profit: parseFloat(profitBudget) }
-      })
+      setBudgets(prev => ({
+        ...prev,
+        [month]: { sales: parsedSales, profitPercent: parsedPercent }
+      }))
     } catch (err) {
       console.error('Feil ved lagring av budsjett:', err)
       alert('Kunne ikke lagre budsjett: ' + err.message)
     }
   }
 
-  const handleEdit = (month, currentSales, currentProfit) => {
+  const applyDefaultToAll = async () => {
+    const percent = parseFloat(defaultPercentInput)
+    if (isNaN(percent)) return
+
+    setDefaultProfitPercent(percent)
+
+    if (isDemoMode) {
+      const updated = { ...budgets, default: { profitPercent: percent } }
+      Object.keys(updated).forEach(key => {
+        if (key !== 'default' && updated[key].sales) {
+          updated[key].profitPercent = percent
+        }
+      })
+      setBudgets(updated)
+      localStorage.setItem('demo_budgets', JSON.stringify(updated))
+      return
+    }
+
+    try {
+      const upsertData = [{
+        tenant_id: tenant.id,
+        month: 'default',
+        sales_budget: 0,
+        profit_budget: percent
+      }]
+
+      Object.entries(budgets).forEach(([month, data]) => {
+        if (month !== 'default' && data.sales) {
+          upsertData.push({
+            tenant_id: tenant.id,
+            month,
+            sales_budget: data.sales,
+            profit_budget: percent
+          })
+        }
+      })
+
+      const { error } = await supabase
+        .from('budgets')
+        .upsert(upsertData, { onConflict: 'tenant_id,month' })
+
+      if (error) throw error
+
+      const updated = { ...budgets, default: { profitPercent: percent } }
+      Object.keys(updated).forEach(key => {
+        if (key !== 'default' && updated[key].sales) {
+          updated[key].profitPercent = percent
+        }
+      })
+      setBudgets(updated)
+    } catch (err) {
+      console.error('Feil ved lagring av standard prosent:', err)
+      alert('Kunne ikke lagre: ' + err.message)
+    }
+  }
+
+  const handleEdit = (month, currentSales, currentProfitPercent) => {
     setEditingMonth(month)
     setEditValues({
       sales: currentSales || '',
-      profit: currentProfit || ''
+      profitPercent: currentProfitPercent || defaultProfitPercent || ''
     })
   }
 
   const handleSave = async () => {
-    await saveBudget(editingMonth, editValues.sales, editValues.profit)
+    await saveBudget(editingMonth, editValues.sales, editValues.profitPercent)
     setEditingMonth(null)
   }
 
   const handleCancel = () => {
     setEditingMonth(null)
-    setEditValues({ sales: '', profit: '' })
+    setEditValues({ sales: '', profitPercent: '' })
   }
 
   // Beregn sammenligning år-til-år med budsjett
@@ -132,7 +219,10 @@ export default function Budget() {
 
       const currentYearData = salesByMonthWithProfit[currentYearKey] || { amount: 0, profit: 0 }
       const previousYearData = salesByMonthWithProfit[previousYearKey] || { amount: 0, profit: 0 }
-      const budgetData = budgets[currentYearKey] || { sales: 0, profit: 0 }
+      const budgetData = budgets[currentYearKey]
+      const effectivePercent = budgetData?.profitPercent ?? (parseFloat(defaultProfitPercent) || 0)
+      const budgetSales = budgetData?.sales || 0
+      const calculatedProfit = budgetSales * effectivePercent / 100
 
       return {
         month: name,
@@ -146,12 +236,13 @@ export default function Budget() {
           profit: previousYearData.profit
         },
         budget: {
-          sales: budgetData.sales,
-          profit: budgetData.profit
+          sales: budgetSales,
+          profitPercent: effectivePercent,
+          profit: calculatedProfit
         }
       }
     })
-  }, [sales, budgets, currentYear])
+  }, [sales, budgets, currentYear, defaultProfitPercent])
 
   // Beregn totale prognoser for året
   const yearSummary = useMemo(() => {
@@ -223,6 +314,37 @@ export default function Budget() {
         </div>
       </div>
 
+      {/* Standard fortjenesteprosent */}
+      <Card className="default-percent-card">
+        <CardContent>
+          <div className="default-percent-section">
+            <div className="default-percent-info">
+              <Percent size={20} />
+              <div>
+                <span className="default-percent-label">Standard fortjeneste %</span>
+                <span className="default-percent-desc">Sett en standard fortjenesteprosent som brukes for alle måneder</span>
+              </div>
+            </div>
+            <div className="default-percent-controls">
+              <Input
+                type="number"
+                placeholder="F.eks. 20"
+                value={defaultPercentInput}
+                onChange={(e) => setDefaultPercentInput(e.target.value)}
+                className="default-percent-input"
+                min="0"
+                max="100"
+                step="0.1"
+              />
+              <span className="percent-symbol">%</span>
+              <Button onClick={applyDefaultToAll} disabled={!defaultPercentInput}>
+                Bruk på alle måneder
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Prognose for året */}
       {yearSummary.budgetSales > 0 && (
         <Card className="forecast-card">
@@ -258,7 +380,8 @@ export default function Budget() {
         </Card>
       )}
 
-      <Card className="budget-card">
+      {/* Desktop: Table view */}
+      <Card className="budget-card budget-desktop">
         <CardHeader>
           <h3>Månedlig oversikt</h3>
         </CardHeader>
@@ -312,21 +435,38 @@ export default function Budget() {
                               onChange={(e) => setEditValues({ ...editValues, sales: e.target.value })}
                               className="budget-input"
                             />
-                            <Input
-                              type="number"
-                              placeholder="Fortjeneste"
-                              value={editValues.profit}
-                              onChange={(e) => setEditValues({ ...editValues, profit: e.target.value })}
-                              className="budget-input"
-                            />
+                            <div className="percent-input-group">
+                              <Input
+                                type="number"
+                                placeholder="Fortjeneste %"
+                                value={editValues.profitPercent}
+                                onChange={(e) => setEditValues({ ...editValues, profitPercent: e.target.value })}
+                                className="budget-input"
+                                min="0"
+                                max="100"
+                                step="0.1"
+                              />
+                              <span className="percent-symbol">%</span>
+                            </div>
+                            {editValues.sales && editValues.profitPercent && (
+                              <span className="calculated-profit">
+                                = {formatCurrency(parseFloat(editValues.sales) * parseFloat(editValues.profitPercent) / 100)}
+                              </span>
+                            )}
                           </div>
                         ) : (
                           <div className="value-group">
                             <div className="value-row">
+                              <span className="label">Omsetning:</span>
                               <span className="amount">{budget.sales ? formatCurrency(budget.sales) : '-'}</span>
                             </div>
                             <div className="value-row">
-                              <span className="amount profit">{budget.profit ? formatCurrency(budget.profit) : '-'}</span>
+                              <span className="label">Fortjeneste:</span>
+                              <span className="amount profit">
+                                {budget.sales
+                                  ? `${budget.profitPercent}% = ${formatCurrency(budget.profit)}`
+                                  : '-'}
+                              </span>
                             </div>
                           </div>
                         )}
@@ -379,9 +519,9 @@ export default function Budget() {
                           <Button 
                             size="sm" 
                             variant="secondary" 
-                            onClick={() => handleEdit(monthKey, budget.sales, budget.profit)}
+                            onClick={() => handleEdit(monthKey, budget.sales, budget.profitPercent)}
                           >
-                            {budget.sales || budget.profit ? <Edit2 size={14} /> : <Plus size={14} />}
+                            {budget.sales || budget.profitPercent ? <Edit2 size={14} /> : <Plus size={14} />}
                           </Button>
                         )}
                       </td>
@@ -393,6 +533,129 @@ export default function Budget() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Mobile: Card view */}
+      <div className="budget-mobile">
+        <h3 className="budget-mobile-title">Månedlig oversikt</h3>
+        {yearComparison.map(({ month, monthKey, currentYear: current, previousYear: previous, budget }) => {
+          const isEditing = editingMonth === monthKey
+          const salesPercentage = calculatePercentage(current.amount, budget.sales)
+          const profitPercentage = calculatePercentage(current.profit, budget.profit)
+
+          return (
+            <Card key={monthKey} className="budget-month-card">
+              <CardContent>
+                <div className="month-card-header">
+                  <h4>{month}</h4>
+                  {isEditing ? (
+                    <div className="action-buttons">
+                      <Button size="sm" onClick={handleSave}>
+                        <Save size={14} />
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={handleCancel}>
+                        <X size={14} />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button 
+                      size="sm" 
+                      variant="secondary" 
+                      onClick={() => handleEdit(monthKey, budget.sales, budget.profitPercent)}
+                    >
+                      {budget.sales || budget.profitPercent ? <Edit2 size={14} /> : <Plus size={14} />}
+                    </Button>
+                  )}
+                </div>
+
+                <div className="month-card-sections">
+                  {/* Faktisk */}
+                  <div className="month-card-section">
+                    <span className="month-card-section-title actual-tag">{currentYear}</span>
+                    <div className="month-card-row">
+                      <span className="month-card-label">Omsetning</span>
+                      <span className="month-card-value">{formatCurrency(current.amount)}</span>
+                      {salesPercentage && (
+                        <span className={`percentage ${salesPercentage.isPositive ? 'good' : 'warning'}`}>
+                          {salesPercentage.isPositive ? '+' : '-'}{salesPercentage.value}%
+                        </span>
+                      )}
+                    </div>
+                    <div className="month-card-row">
+                      <span className="month-card-label">Fortjeneste</span>
+                      <span className="month-card-value profit">{formatCurrency(current.profit)}</span>
+                      {profitPercentage && (
+                        <span className={`percentage ${profitPercentage.isPositive ? 'good' : 'warning'}`}>
+                          {profitPercentage.isPositive ? '+' : '-'}{profitPercentage.value}%
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Budsjett */}
+                  <div className="month-card-section">
+                    <span className="month-card-section-title budget-tag">Budsjett</span>
+                    {isEditing ? (
+                      <div className="month-card-edit">
+                        <Input
+                          type="number"
+                          placeholder="Omsetning"
+                          value={editValues.sales}
+                          onChange={(e) => setEditValues({ ...editValues, sales: e.target.value })}
+                          className="budget-input-mobile"
+                        />
+                        <div className="percent-input-group">
+                          <Input
+                            type="number"
+                            placeholder="Fortjeneste %"
+                            value={editValues.profitPercent}
+                            onChange={(e) => setEditValues({ ...editValues, profitPercent: e.target.value })}
+                            className="budget-input-mobile"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                          />
+                          <span className="percent-symbol">%</span>
+                        </div>
+                        {editValues.sales && editValues.profitPercent && (
+                          <span className="calculated-profit">
+                            = {formatCurrency(parseFloat(editValues.sales) * parseFloat(editValues.profitPercent) / 100)}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="month-card-row">
+                          <span className="month-card-label">Omsetning</span>
+                          <span className="month-card-value">{budget.sales ? formatCurrency(budget.sales) : '-'}</span>
+                        </div>
+                        <div className="month-card-row">
+                          <span className="month-card-label">Fortjeneste</span>
+                          <span className="month-card-value profit">
+                            {budget.sales ? `${budget.profitPercent}% = ${formatCurrency(budget.profit)}` : '-'}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Fjoråret */}
+                  <div className="month-card-section">
+                    <span className="month-card-section-title previous-tag">{currentYear - 1}</span>
+                    <div className="month-card-row">
+                      <span className="month-card-label">Omsetning</span>
+                      <span className="month-card-value muted">{formatCurrency(previous.amount)}</span>
+                    </div>
+                    <div className="month-card-row">
+                      <span className="month-card-label">Fortjeneste</span>
+                      <span className="month-card-value muted profit">{formatCurrency(previous.profit)}</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
     </div>
   )
 }
